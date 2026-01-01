@@ -7,39 +7,22 @@
     <style>
         body { font-family: sans-serif; background: #121212; color: #e0e0e0; margin: 0; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
         
-        #top-section { height: 60vh; display: flex; padding: 10px; background: #1a1a1a; border-bottom: 2px solid #333; box-sizing: border-box; }
+        /* メニューバーのスタイル */
+        #menu-bar { background: #333; padding: 5px 15px; display: flex; gap: 20px; border-bottom: 1px solid #444; z-index: 100; }
+        .menu-item { cursor: pointer; font-size: 14px; padding: 5px 10px; border-radius: 4px; transition: 0.2s; position: relative; }
+        .menu-item:hover { background: #444; color: #00ffcc; }
+        #file-input { display: none; } /* 非表示のファイル入力 */
+
+        #top-section { height: 55vh; display: flex; padding: 10px; background: #1a1a1a; border-bottom: 2px solid #333; box-sizing: border-box; }
         #chart-container { flex-grow: 1; background: #000; border-radius: 8px; min-width: 0; }
         #chart-controls { width: 220px; padding: 15px; background: #252525; border-radius: 8px; margin-left: 10px; font-size: 14px; flex-shrink: 0; }
         
-        #bottom-section { 
-            height: 40vh; 
-            overflow: auto; 
-            padding: 0; 
-            background: #121212; 
-            box-sizing: border-box;
-            scroll-snap-type: both mandatory;
-            scroll-behavior: smooth;
-        }
-        
+        #bottom-section { height: 40vh; overflow: auto; padding: 0; background: #121212; box-sizing: border-box; scroll-snap-type: both mandatory; scroll-behavior: smooth; }
         .grid-container { display: grid; grid-template-columns: 80px repeat(20, 55px); gap: 1px; background: #444; width: max-content; }
-        
-        .cell { 
-            background: #222; 
-            height: 28px; 
-            display: flex; 
-            align-items: center; 
-            justify-content: center; 
-            font-size: 12px;
-            scroll-snap-align: start;
-            /* 固定列(80px)と重ならないようにスクロールマージンを設定 */
-            scroll-margin-left: 80px; 
-            scroll-margin-top: 28px;
-        }
-        
+        .cell { background: #222; height: 28px; display: flex; align-items: center; justify-content: center; font-size: 12px; scroll-snap-align: start; scroll-margin-left: 80px; scroll-margin-top: 28px; }
         .header-cell { background: #333 !important; font-weight: bold; color: #00ffcc; font-size: 10px; position: sticky; top: 0; z-index: 3; }
         .label-cell { background: #333 !important; font-weight: bold; position: sticky; left: 0; z-index: 2; text-align: right; padding-right: 5px; }
         .corner-cell { position: sticky; top: 0; left: 0; z-index: 4; border-right: 1px solid #444; }
-
         .cell input { width: 100%; height: 100%; border: none; text-align: center; background: transparent; color: inherit; font-size: 13px; outline: none; }
         .cross-highlight { background: #2a3d2a !important; }
         .selected-cell { background: #00ffcc !important; color: #000 !important; font-weight: bold; }
@@ -48,6 +31,12 @@
     </style>
 </head>
 <body>
+
+<div id="menu-bar">
+    <div class="menu-item" onclick="document.getElementById('file-input').click()">ファイルを開く (CSV)</div>
+    <div class="menu-item" onclick="exportToCSV()">保存 (CSV)</div>
+    <input type="file" id="file-input" accept=".csv" onchange="importFromCSV(this)">
+</div>
 
 <div id="top-section">
     <div id="chart-container"></div>
@@ -72,8 +61,8 @@
     const RPM_BREAKPOINTS = Array.from({length: 20}, (_, i) => 500 + i * 500);
     const TPS_BREAKPOINTS = Array.from({length: 21}, (_, i) => i * 5);
     let fuelMap = [];
-    let selectedR = 0; // 初期選択を500rpmに変更
-    let selectedT = 0; 
+    let selectedR = 0;
+    let selectedT = 0;
 
     function initData() {
         for (let t = 0; t < 21; t++) {
@@ -83,6 +72,48 @@
                 fuelMap[t][r] = val;
             }
         }
+    }
+
+    // CSV保存機能
+    function exportToCSV() {
+        let csvContent = "TPS\\RPM," + RPM_BREAKPOINTS.join(",") + "\n";
+        fuelMap.forEach((row, i) => {
+            csvContent += TPS_BREAKPOINTS[i] + "%," + row.join(",") + "\n";
+        });
+        
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement("a");
+        const url = URL.createObjectURL(blob);
+        link.setAttribute("href", url);
+        link.setAttribute("download", "ecu_map_data.csv");
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    }
+
+    // CSV読み込み機能
+    function importFromCSV(input) {
+        const file = input.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            const lines = e.target.result.split('\n');
+            // ヘッダーを除いた各行を処理
+            for (let t = 0; t < 21; t++) {
+                if (!lines[t+1]) break;
+                const cols = lines[t+1].split(',');
+                for (let r = 0; r < 20; r++) {
+                    if (cols[r+1] !== undefined) {
+                        fuelMap[t][r] = parseInt(cols[r+1]) || 0;
+                    }
+                }
+            }
+            renderTable();
+            updateGraph();
+            input.value = ""; // 入力リセット
+        };
+        reader.readAsText(file);
     }
 
     function createCell(text, className) {
@@ -96,7 +127,6 @@
         const container = document.getElementById('mapGrid');
         if (!container) return;
         container.innerHTML = '';
-
         container.appendChild(createCell('TPS\\RPM', 'header-cell label-cell corner-cell'));
         RPM_BREAKPOINTS.forEach(rpm => container.appendChild(createCell(rpm, 'header-cell')));
 
@@ -117,43 +147,24 @@
                 input.type = 'number';
                 input.value = val;
                 input.id = `input-${tIdx}-${rIdx}`;
-                
-                input.onfocus = () => { 
-                    selectedT = tIdx; 
-                    selectedR = rIdx; 
-                    renderTable(); 
-                    updateGraph(); 
-                };
-                
-                input.oninput = (e) => { 
-                    fuelMap[tIdx][rIdx] = parseInt(e.target.value) || 0; 
-                    updateGraph(); 
-                };
-                
+                input.onfocus = () => { selectedT = tIdx; selectedR = rIdx; renderTable(); updateGraph(); };
+                input.oninput = (e) => { fuelMap[tIdx][rIdx] = parseInt(e.target.value) || 0; updateGraph(); };
                 input.onkeydown = (e) => {
-                    let nextT = tIdx;
-                    let nextR = rIdx;
+                    let nextT = tIdx; let nextR = rIdx;
                     if (e.key === "ArrowUp") nextT--;
                     else if (e.key === "ArrowDown") nextT++;
                     else if (e.key === "ArrowLeft") nextR--;
                     else if (e.key === "ArrowRight") nextR++;
                     else return;
-
                     if (nextT >= 0 && nextT < 21 && nextR >= 0 && nextR < 20) {
                         e.preventDefault();
                         const nextInput = document.getElementById(`input-${nextT}-${nextR}`);
                         if (nextInput) {
                             nextInput.focus();
-                            // inline: 'nearest' にすることで不自然なジャンプを防止
-                            nextInput.parentElement.scrollIntoView({
-                                behavior: 'auto', 
-                                block: 'nearest', 
-                                inline: 'nearest' 
-                            });
+                            nextInput.parentElement.scrollIntoView({ behavior: 'auto', block: 'nearest', inline: 'nearest' });
                         }
                     }
                 };
-
                 cell.appendChild(input);
                 container.appendChild(cell);
             });
@@ -170,7 +181,6 @@
             margin: {t:40, l:50, r:30, b:50}, font: {color: '#fff'},
             xaxis: { gridcolor: '#333' }, yaxis: { gridcolor: '#333' }
         };
-
         if (mode === 'tps') {
             data = [{ x: TPS_BREAKPOINTS, y: fuelMap.map(row => row[selectedR]), type: 'scatter', mode: 'lines+markers', line: {color: '#00ffcc'} }];
         } else if (mode === 'rpm') {
@@ -186,10 +196,7 @@
         initData();
         renderTable();
         const checkPlotly = setInterval(() => {
-            if (typeof Plotly !== 'undefined') {
-                clearInterval(checkPlotly);
-                updateGraph();
-            }
+            if (typeof Plotly !== 'undefined') { clearInterval(checkPlotly); updateGraph(); }
         }, 100);
     }
 
