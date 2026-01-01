@@ -14,10 +14,11 @@
         #bottom-section { 
             height: 40vh; 
             overflow: auto; 
-            padding: 0; /* スナップの精度を上げるためパディングを0に */
+            padding: 0; 
             background: #121212; 
             box-sizing: border-box;
             scroll-snap-type: both mandatory;
+            scroll-behavior: smooth;
         }
         
         .grid-container { display: grid; grid-template-columns: 80px repeat(20, 55px); gap: 1px; background: #444; width: max-content; }
@@ -30,6 +31,9 @@
             justify-content: center; 
             font-size: 12px;
             scroll-snap-align: start;
+            /* 固定列(80px)と重ならないようにスクロールマージンを設定 */
+            scroll-margin-left: 80px; 
+            scroll-margin-top: 28px;
         }
         
         .header-cell { background: #333 !important; font-weight: bold; color: #00ffcc; font-size: 10px; position: sticky; top: 0; z-index: 3; }
@@ -68,8 +72,8 @@
     const RPM_BREAKPOINTS = Array.from({length: 20}, (_, i) => 500 + i * 500);
     const TPS_BREAKPOINTS = Array.from({length: 21}, (_, i) => i * 5);
     let fuelMap = [];
-    let selectedR = 5;
-    let selectedT = 10;
+    let selectedR = 0; // 初期選択を500rpmに変更
+    let selectedT = 0; 
 
     function initData() {
         for (let t = 0; t < 21; t++) {
@@ -140,11 +144,11 @@
                         const nextInput = document.getElementById(`input-${nextT}-${nextR}`);
                         if (nextInput) {
                             nextInput.focus();
-                            // 横方向の強制スクロール制御を追加
+                            // inline: 'nearest' にすることで不自然なジャンプを防止
                             nextInput.parentElement.scrollIntoView({
                                 behavior: 'auto', 
                                 block: 'nearest', 
-                                inline: 'start'
+                                inline: 'nearest' 
                             });
                         }
                     }
