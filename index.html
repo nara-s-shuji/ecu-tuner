@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>ECU Map Editor Pro - 2026 Edition</title>
+    <script src="cdn.plot.ly" charset="utf-8"></script>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; background: #121212; color: #e0e0e0; margin: 0; display: flex; flex-direction: column; height: 100vh; }
+        
+        /* 上部グラフエリア */
+        #top-section { height: 45vh; display: flex; padding: 10px; background: #1a1a1a; border-bottom: 2px solid #333; }
+        #chart-container { flex-grow: 1; background: #000; border-radius: 8px; position: relative; }
+        #chart-controls { width: 220px; padding: 15px; background: #252525; border-radius: 8px; margin-left: 10px; font-size: 14px; }
+        .control-group { margin-bottom: 20px; border-bottom: 1px solid #444; padding-bottom: 10px; }
+        
+        /* 下部テーブルエリア */
+        #bottom-section { flex-grow: 1; overflow: auto; padding: 20px; background: #121212; }
+        .grid-container { 
+            display: grid; 
+            grid-template-columns: 80px repeat(20, 50px); 
+            gap: 1px; background: #444; border: 1px solid #444; width: max-content;
+        }
+
+        .cell { 
+            background: #222; height: 30px; display: flex; align-items: center; 
+            justify-content: center; font-size: 12px; cursor: pointer; user-select: none;
+        }
+        .header-cell { background: #333; font-weight: bold; color: #00ffcc; font-size: 10px; position: sticky; top: 0; z-index: 2; }
+        .label-cell { background: #333; font-weight: bold; position: sticky; left: 0; z-index: 1; text-align: right; padding-right: 5px; }
+
+        /* 濃淡と選択色 */
+        .cell input { width: 100%; height: 100%; border: none; text-align: center; background: transparent; color: inherit; font-size: 12px; outline: none; }
+        .cross-highlight { background: #334433 !important; } /* 十字ハイライト */
+        .selected-cell { background: #00ffcc !important; color: #000 !important; font-weight: bold; }
+        
+        h3 { margin: 0 0 10px 0; color: #00ffcc; font-size: 16px; }
+        label { display: block; margin: 8px 0; cursor: pointer; }
+    </style>
+</head>
+<body>
+
+<div id="top-section">
+    <div id="chart-container"></div>
+    <div id="chart-controls">
+        <h3>Graph Mode</h3>
+        <div class="control-group">
+            <label><input type="radio" name="viewMode" value="tps" checked> 1: 固定回転数 (vs TPS)</label>
+            <label><input type="radio" name="viewMode" value="rpm"> 2: 固定TPS (vs RPM)</label>
+            <label><input type="radio" name="viewMode" value="3d"> 3: 3Dビュー</label>
+        </div>
+        <div id="slice-info" style="font-size: 12px; color: #aaa;">
+            選択中: <span id="current-focus" style="color: #fff;">-</span>
+        </div>
+    </div>
+</div>
+
+<div id="bottom-section">
+    <div class="grid-container" id="mapGrid"></div>
+</div>
+
+<script>
+    const RPM_BREAKPOINTS = Array.from({length: 20}, (_, i) => 500 + i * 500);
+    const TPS_BREAKPOINTS = Array.from({length: 21}, (_, i) => i * 5);
+    
+    let fuelMap = [];
+    let selectedR = 5;
+    let selectedT = 10;
+
+    // ダミーデータの生成 (山なりの燃調マップをシミュレート)
+    function initData() {
+        for (let t = 0; t < 21; t++) {
+            fuelMap[t] = [];
+            for (let r = 0; r < 20; r++) {
+                // 中心付近が大きく、端が小さいダミー数値 (40-200)
+                let val = Math.floor(100 + 60 * Math.sin(r/6) * Math.sin(t/10) + (t*2));
+                fuelMap[t][r] = val;
+            }
+        }
+    }
+
+    function getHeatColor(val) {
+        let brightness = Math.min(255, val);
+        return `rgb(${brightness/4}, ${brightness/2}, ${brightness})`; // 青系の濃淡
+    }
+
+    function renderTable() {
+        const container = document.getElementById('mapGrid');
+        container.innerHTML = '';
+
+        // ヘッダー (RPM)
+        container.appendChild(createCell('TPS\\RPM', 'header-cell label-cell'));
+        RPM_BREAKPOINTS.forEach(rpm => {
+            container.appendChild(createCell(rpm, 'header-cell'));
+        });
+
+        // ボディ
+        TPS_BREAKPOINTS.forEach((tps, tIdx) => {
+            container.appendChild(createCell(tps + '%', 'label-cell'));
+            RPM_BREAKPOINTS.forEach((rpm, rIdx) => {
+                const val = fuelMap[tIdx][rIdx];
+                const cell = document.createElement('div');
+                cell.className = 'cell';
+                
+                // ハイライト処理
+                if (tIdx === selectedT && rIdx === selectedR) cell.classList.add('selected-cell');
+                else if (tIdx === selectedT || rIdx === selectedR) cell.classList.add('cross-highlight');
+                
+                cell.style.backgroundColor = getHeatColor(val);
+                cell.style.color = val > 120 ? '#fff' : '#aaa';
+                
+                const input = document.createElement('input');
+                input.value = val;
+                input.addEventListener('focus', () => {
+                    selectedT = tIdx; selectedR = rIdx;
+                    renderTable();
+                    updateGraph();
+                });
+                input.addEventListener('input', (e) => {
+                    fuelMap[tIdx][rIdx] = parseInt(e.target.value) || 0;
+                    updateGraph();
+                });
+
+                cell.appendChild(input);
+                container.appendChild(cell);
+            });
+        });
+        document.getElementById('current-focus').innerText = `RPM:${RPM_BREAKPOINTS[selectedR]} / TPS:${TPS_BREAKPOINTS[selectedT]}%`;
+    }
+
+    function createCell(text, className) {
+        const div = document.createElement('div');
+        div.className = 'cell ' + className;
+        div.innerText = text;
+        return div;
+    }
+
+    function updateGraph() {
+        const mode = document.querySelector('input[name="viewMode"]:checked').value;
+        let data = [];
+        let layout = {
+            paper_bgcolor: '#000', plot_bgcolor: '#000',
+            margin: {t:30, l:50, r:30, b:50},
+            font: {color: '#fff'},
+            xaxis: { gridcolor: '#333' }, yaxis: { gridcolor: '#333' }
+        };
+
+        if (mode === 'tps') {
+            data = [{
+                x: TPS_BREAKPOINTS,
+                y: fuelMap.map(row => row[selectedR]),
+                type: 'scatter', mode: 'lines+markers', line: {color: '#00ffcc'}
+            }];
+            layout.xaxis.title = 'TPS (%)'; layout.yaxis.title = 'Value';
+        } else if (mode === 'rpm') {
+            data = [{
+                x: RPM_BREAKPOINTS,
+                y: fuelMap[selectedT],
+                type: 'scatter', mode: 'lines+markers', line: {color: '#ffaa00'}
+            }];
+            layout.xaxis.title = 'RPM'; layout.yaxis.title = 'Value';
+        } else {
+            data = [{
+                z: fuelMap,
+                x: RPM_BREAKPOINTS,
+                y: TPS_BREAKPOINTS,
+                type: 'surface', colorscale: 'Viridis'
+            }];
+            layout.scene = {
+                xaxis: {title: 'RPM'}, yaxis: {title: 'TPS'}, zaxis: {title: 'Val'},
+                camera: { eye: {x: 1.5, y: 1.5, z: 1.2} }
+            };
+        }
+
+        Plotly.newPlot('chart-container', data, layout, {responsive: true, displayModeBar: false});
+    }
+
+    // イベント設定
+    document.querySelectorAll('input[name="viewMode"]').forEach(radio => {
+        radio.addEventListener('change', updateGraph);
+    });
+
+    // 初期化
+    window.onload = function() {
+        initData();
+        renderTable();
+        updateGraph();
+    };
+</script>
+
+</body>
+</html>
