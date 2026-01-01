@@ -180,11 +180,17 @@
     });
 
     // 初期化
-    window.onload = function() {
+    document.addEventListener('DOMContentLoaded', function() {
         initData();
         renderTable();
         updateGraph();
-    };
+    });
+
+    // ラジオボタンの切り替えイベントも確実に設定
+    document.querySelectorAll('input[name="viewMode"]').forEach(radio => {
+        radio.addEventListener('change', updateGraph);
+    });
+
 </script>
 
 </body>
