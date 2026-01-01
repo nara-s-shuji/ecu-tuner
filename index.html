@@ -7,21 +7,23 @@
     <style>
         body { font-family: sans-serif; background: #121212; color: #e0e0e0; margin: 0; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
         
-        #top-section { height: 45vh; display: flex; padding: 10px; background: #1a1a1a; border-bottom: 2px solid #333; box-sizing: border-box; }
+        #top-section { height: 50vh; display: flex; padding: 10px; background: #1a1a1a; border-bottom: 2px solid #333; box-sizing: border-box; }
         #chart-container { flex-grow: 1; background: #000; border-radius: 8px; min-width: 0; }
         #chart-controls { width: 220px; padding: 15px; background: #252525; border-radius: 8px; margin-left: 10px; font-size: 14px; flex-shrink: 0; }
-        .control-group { margin-bottom: 20px; border-bottom: 1px solid #444; padding-bottom: 10px; }
         
         /* 表エリアの高さとスクロール設定 */
-        #bottom-section { max-height: 55vh; overflow-y: auto; padding: 20px; background: #121212; }
+        #bottom-section { max-height: 40vh; overflow-y: auto; padding: 10px; background: #121212; }
         
+        /* セルの高さ調整 */
         .grid-container { display: grid; grid-template-columns: 80px repeat(20, 55px); gap: 1px; background: #444; width: max-content; }
-        .cell { background: #222; height: 35px; display: flex; align-items: center; justify-content: center; font-size: 12px; }
+        .cell { background: #222; height: 28px; display: flex; align-items: center; justify-content: center; font-size: 12px; }
         
         /* ヘッダーの固定設定 */
-        .header-cell { background: #333; font-weight: bold; color: #00ffcc; font-size: 10px; position: sticky; top: 0; z-index: 2; }
-        .label-cell { background: #333; font-weight: bold; position: sticky; left: 0; z-index: 1; text-align: right; padding-right: 5px; }
-        
+        .header-cell { background: #333; font-weight: bold; color: #00ffcc; font-size: 10px; position: sticky; top: 0; z-index: 3; }
+        .label-cell { background: #333; font-weight: bold; position: sticky; left: 0; z-index: 2; text-align: right; padding-right: 5px; }
+        /* 左上の角も固定 */
+        .corner-cell { position: sticky; top: 0; left: 0; z-index: 4; }
+
         .cell input { width: 100%; height: 100%; border: none; text-align: center; background: transparent; color: inherit; font-size: 13px; outline: none; }
         .cross-highlight { background: #2a3d2a !important; }
         .selected-cell { background: #00ffcc !important; color: #000 !important; font-weight: bold; }
@@ -79,11 +81,17 @@
         if (!container) return;
         container.innerHTML = '';
 
-        container.appendChild(createCell('TPS\\RPM', 'header-cell label-cell'));
+        // 左上の角セル
+        container.appendChild(createCell('TPS\\RPM', 'header-cell label-cell corner-cell'));
+        
+        // ヘッダー行 (RPM)
         RPM_BREAKPOINTS.forEach(rpm => container.appendChild(createCell(rpm, 'header-cell')));
 
+        // マップ本体
         TPS_BREAKPOINTS.forEach((tps, tIdx) => {
+            // TPSラベル列
             container.appendChild(createCell(tps + '%', 'label-cell'));
+            
             RPM_BREAKPOINTS.forEach((rpm, rIdx) => {
                 const val = fuelMap[tIdx][rIdx];
                 const cell = document.createElement('div');
@@ -115,24 +123,20 @@
         let layout = {
             paper_bgcolor: '#1a1a1a', plot_bgcolor: '#000',
             margin: {t:40, l:50, r:30, b:50}, font: {color: '#fff'},
-            xaxis: { gridcolor: '#333', title: '' }, 
-            yaxis: { gridcolor: '#333', title: '' }
+            xaxis: { gridcolor: '#333' }, yaxis: { gridcolor: '#333' }
         };
 
         if (mode === 'tps') {
             data = [{ x: TPS_BREAKPOINTS, y: fuelMap.map(row => row[selectedR]), type: 'scatter', mode: 'lines+markers', line: {color: '#00ffcc'} }];
-            layout.xaxis.title = 'TPS (%)'; layout.yaxis.title = 'Value';
         } else if (mode === 'rpm') {
             data = [{ x: RPM_BREAKPOINTS, y: fuelMap[selectedT], type: 'scatter', mode: 'lines+markers', line: {color: '#ffaa00'} }];
-            layout.xaxis.title = 'RPM'; layout.yaxis.title = 'Value';
         } else if (mode === '3d') {
             data = [{ z: fuelMap, x: RPM_BREAKPOINTS, y: TPS_BREAKPOINTS, type: 'surface', colorscale: 'Viridis' }];
             layout.scene = { xaxis: {title: 'RPM'}, yaxis: {title: 'TPS'}, zaxis: {title: 'Val'} };
         }
         
+        // Plotly.react を使って再描画
         Plotly.react('chart-container', data, layout, {responsive: true, displayModeBar: false});
-        // グラフ描画後にコンテナサイズを再調整し、グラフ領域を最大化
-        Plotly.Plots.resize('chart-container');
     }
 
     function init() {
