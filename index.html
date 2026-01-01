@@ -11,14 +11,14 @@
         #chart-container { flex-grow: 1; background: #000; border-radius: 8px; min-width: 0; }
         #chart-controls { width: 220px; padding: 15px; background: #252525; border-radius: 8px; margin-left: 10px; font-size: 14px; flex-shrink: 0; }
         
-        /* 表エリア：スクロールスナップの設定 */
+        /* 表エリア：縦横両方向のスナップを設定 */
         #bottom-section { 
             height: 40vh; 
-            overflow-y: auto; 
+            overflow: auto; /* 両方向にスクロール可能 */
             padding: 0 10px 10px 10px; 
             background: #121212; 
             box-sizing: border-box;
-            scroll-snap-type: y mandatory; /* 縦方向のスナップを強制 */
+            scroll-snap-type: both mandatory; /* 縦横両方のスナップを強制 */
         }
         
         .grid-container { display: grid; grid-template-columns: 80px repeat(20, 55px); gap: 1px; background: #444; width: max-content; }
@@ -31,7 +31,7 @@
             align-items: center; 
             justify-content: center; 
             font-size: 12px;
-            scroll-snap-align: start; /* セルの上端で止まる */
+            scroll-snap-align: start; /* セルの角で止まる */
         }
         
         .header-cell { background: #333 !important; font-weight: bold; color: #00ffcc; font-size: 10px; position: sticky; top: 0; z-index: 3; }
@@ -114,7 +114,7 @@
                 const input = document.createElement('input');
                 input.type = 'number';
                 input.value = val;
-                input.id = `input-${tIdx}-${rIdx}`; // IDを付与
+                input.id = `input-${tIdx}-${rIdx}`;
                 
                 input.onfocus = () => { 
                     selectedT = tIdx; 
@@ -127,7 +127,6 @@
                     updateGraph(); 
                 };
                 
-                // キーボードナビゲーションの追加
                 input.onkeydown = (e) => {
                     let nextT = tIdx;
                     let nextR = rIdx;
