@@ -3,34 +3,34 @@
 <head>
     <meta charset="UTF-8">
     <title>ECU Map Editor Pro - 2026 Edition</title>
+    <!-- Plotlyライブラリを確実に読み込む -->
     <script src="cdn.plot.ly" charset="utf-8"></script>
     <style>
-        body { font-family: 'Segoe UI', sans-serif; background: #121212; color: #e0e0e0; margin: 0; display: flex; flex-direction: column; height: 100vh; }
+        body { font-family: 'Segoe UI', sans-serif; background: #121212; color: #e0e0e0; margin: 0; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
         
         /* 上部グラフエリア */
-        #top-section { height: 45vh; display: flex; padding: 10px; background: #1a1a1a; border-bottom: 2px solid #333; }
-        #chart-container { flex-grow: 1; background: #000; border-radius: 8px; position: relative; }
-        #chart-controls { width: 220px; padding: 15px; background: #252525; border-radius: 8px; margin-left: 10px; font-size: 14px; }
+        #top-section { height: 45vh; display: flex; padding: 10px; background: #1a1a1a; border-bottom: 2px solid #333; box-sizing: border-box; }
+        #chart-container { flex-grow: 1; background: #000; border-radius: 8px; position: relative; min-width: 0; }
+        #chart-controls { width: 220px; padding: 15px; background: #252525; border-radius: 8px; margin-left: 10px; font-size: 14px; flex-shrink: 0; }
         .control-group { margin-bottom: 20px; border-bottom: 1px solid #444; padding-bottom: 10px; }
         
         /* 下部テーブルエリア */
         #bottom-section { flex-grow: 1; overflow: auto; padding: 20px; background: #121212; }
         .grid-container { 
             display: grid; 
-            grid-template-columns: 80px repeat(20, 50px); 
+            grid-template-columns: 80px repeat(20, 55px); 
             gap: 1px; background: #444; border: 1px solid #444; width: max-content;
         }
 
         .cell { 
-            background: #222; height: 30px; display: flex; align-items: center; 
-            justify-content: center; font-size: 12px; cursor: pointer; user-select: none;
+            background: #222; height: 35px; display: flex; align-items: center; 
+            justify-content: center; font-size: 12px; cursor: pointer;
         }
         .header-cell { background: #333; font-weight: bold; color: #00ffcc; font-size: 10px; position: sticky; top: 0; z-index: 2; }
         .label-cell { background: #333; font-weight: bold; position: sticky; left: 0; z-index: 1; text-align: right; padding-right: 5px; }
 
-        /* 濃淡と選択色 */
-        .cell input { width: 100%; height: 100%; border: none; text-align: center; background: transparent; color: inherit; font-size: 12px; outline: none; }
-        .cross-highlight { background: #334433 !important; } /* 十字ハイライト */
+        .cell input { width: 100%; height: 100%; border: none; text-align: center; background: transparent; color: inherit; font-size: 13px; outline: none; }
+        .cross-highlight { background: #2a3d2a !important; }
         .selected-cell { background: #00ffcc !important; color: #000 !important; font-weight: bold; }
         
         h3 { margin: 0 0 10px 0; color: #00ffcc; font-size: 16px; }
@@ -63,15 +63,14 @@
     const TPS_BREAKPOINTS = Array.from({length: 21}, (_, i) => i * 5);
     
     let fuelMap = [];
-    let selectedR = 5;
-    let selectedT = 10;
+    let selectedR = 5; // 初期選択 RPM インデックス
+    let selectedT = 10; // 初期選択 TPS インデックス
 
-    // ダミーデータの生成 (山なりの燃調マップをシミュレート)
+    // ダミーデータの生成
     function initData() {
         for (let t = 0; t < 21; t++) {
             fuelMap[t] = [];
             for (let r = 0; r < 20; r++) {
-                // 中心付近が大きく、端が小さいダミー数値 (40-200)
                 let val = Math.floor(100 + 60 * Math.sin(r/6) * Math.sin(t/10) + (t*2));
                 fuelMap[t][r] = val;
             }
@@ -80,20 +79,19 @@
 
     function getHeatColor(val) {
         let brightness = Math.min(255, val);
-        return `rgb(${brightness/4}, ${brightness/2}, ${brightness})`; // 青系の濃淡
+        return `rgb(${brightness/4}, ${brightness/2}, ${brightness})`;
     }
 
     function renderTable() {
         const container = document.getElementById('mapGrid');
+        if (!container) return;
         container.innerHTML = '';
 
-        // ヘッダー (RPM)
         container.appendChild(createCell('TPS\\RPM', 'header-cell label-cell'));
         RPM_BREAKPOINTS.forEach(rpm => {
             container.appendChild(createCell(rpm, 'header-cell'));
         });
 
-        // ボディ
         TPS_BREAKPOINTS.forEach((tps, tIdx) => {
             container.appendChild(createCell(tps + '%', 'label-cell'));
             RPM_BREAKPOINTS.forEach((rpm, rIdx) => {
@@ -101,7 +99,6 @@
                 const cell = document.createElement('div');
                 cell.className = 'cell';
                 
-                // ハイライト処理
                 if (tIdx === selectedT && rIdx === selectedR) cell.classList.add('selected-cell');
                 else if (tIdx === selectedT || rIdx === selectedR) cell.classList.add('cross-highlight');
                 
@@ -109,6 +106,7 @@
                 cell.style.color = val > 120 ? '#fff' : '#aaa';
                 
                 const input = document.createElement('input');
+                input.type = 'number';
                 input.value = val;
                 input.addEventListener('focus', () => {
                     selectedT = tIdx; selectedR = rIdx;
@@ -135,30 +133,34 @@
     }
 
     function updateGraph() {
+        // Plotlyが読み込まれていない場合はスキップ
+        if (typeof Plotly === 'undefined') return;
+
         const mode = document.querySelector('input[name="viewMode"]:checked').value;
         let data = [];
         let layout = {
-            paper_bgcolor: '#000', plot_bgcolor: '#000',
-            margin: {t:30, l:50, r:30, b:50},
+            paper_bgcolor: '#1a1a1a', plot_bgcolor: '#000',
+            margin: {t:40, l:50, r:30, b:50},
             font: {color: '#fff'},
-            xaxis: { gridcolor: '#333' }, yaxis: { gridcolor: '#333' }
+            xaxis: { gridcolor: '#333', title: '' }, 
+            yaxis: { gridcolor: '#333', title: '' }
         };
 
         if (mode === 'tps') {
             data = [{
                 x: TPS_BREAKPOINTS,
                 y: fuelMap.map(row => row[selectedR]),
-                type: 'scatter', mode: 'lines+markers', line: {color: '#00ffcc'}
+                type: 'scatter', mode: 'lines+markers', line: {color: '#00ffcc', width: 3}
             }];
             layout.xaxis.title = 'TPS (%)'; layout.yaxis.title = 'Value';
         } else if (mode === 'rpm') {
             data = [{
                 x: RPM_BREAKPOINTS,
                 y: fuelMap[selectedT],
-                type: 'scatter', mode: 'lines+markers', line: {color: '#ffaa00'}
+                type: 'scatter', mode: 'lines+markers', line: {color: '#ffaa00', width: 3}
             }];
             layout.xaxis.title = 'RPM'; layout.yaxis.title = 'Value';
-        } else {
+        } else if (mode === '3d') {
             data = [{
                 z: fuelMap,
                 x: RPM_BREAKPOINTS,
@@ -166,31 +168,42 @@
                 type: 'surface', colorscale: 'Viridis'
             }];
             layout.scene = {
-                xaxis: {title: 'RPM'}, yaxis: {title: 'TPS'}, zaxis: {title: 'Val'},
+                xaxis: {title: 'RPM', gridcolor: '#444'}, 
+                yaxis: {title: 'TPS', gridcolor: '#444'}, 
+                zaxis: {title: 'Val', gridcolor: '#444'},
                 camera: { eye: {x: 1.5, y: 1.5, z: 1.2} }
             };
         }
 
-        Plotly.newPlot('chart-container', data, layout, {responsive: true, displayModeBar: false});
+        Plotly.react('chart-container', data, layout, {responsive: true, displayModeBar: false});
     }
 
-    // イベント設定
-    document.querySelectorAll('input[name="viewMode"]').forEach(radio => {
-        radio.addEventListener('change', updateGraph);
-    });
-
-    // 初期化
-    document.addEventListener('DOMContentLoaded', function() {
+    // --- 実行制御 ---
+    function startApp() {
+        // Plotlyが外部から読み込まれるのを待つ
+        if (typeof Plotly === 'undefined') {
+            setTimeout(startApp, 100);
+            return;
+        }
         initData();
         renderTable();
         updateGraph();
-    });
 
-    // ラジオボタンの切り替えイベントも確実に設定
-    document.querySelectorAll('input[name="viewMode"]').forEach(radio => {
-        radio.addEventListener('change', updateGraph);
-    });
+        // イベント登録
+        document.querySelectorAll('input[name="viewMode"]').forEach(radio => {
+            radio.addEventListener('change', updateGraph);
+        });
+        
+        // ウィンドウサイズ変更時にグラフをリサイズ
+        window.onresize = () => Plotly.Plots.resize('chart-container');
+    }
 
+    // ページ読み込み完了時に開始
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', startApp);
+    } else {
+        startApp();
+    }
 </script>
 
 </body>
