@@ -46,6 +46,46 @@
             opacity: 1;
         }
         .toolbar-title { padding: 0 16px; font-size: 12px; color: #888; margin-left: auto; }
+        
+        /* ハンバーガーメニュー */
+        .hamburger-menu { 
+            background: transparent; 
+            border: none; 
+            color: var(--text); 
+            padding: 8px 16px; 
+            cursor: pointer; 
+            font-size: 20px;
+            height: 100%;
+            border-left: 1px solid var(--border);
+            transition: background 0.2s;
+        }
+        .hamburger-menu:hover { background: #3e3e42; }
+        
+        /* 設定メニュー */
+        #settings-menu {
+            position: fixed;
+            top: 40px;
+            right: 0;
+            width: 300px;
+            background: var(--panel);
+            border: 1px solid var(--border);
+            box-shadow: 0 4px 16px rgba(0,0,0,0.5);
+            z-index: 2000;
+            display: none;
+            padding: 15px;
+        }
+        #settings-menu.active { display: block; }
+        #settings-menu h3 { margin: 0 0 15px 0; font-size: 14px; color: var(--accent); }
+        .setting-item { margin-bottom: 15px; }
+        .setting-item label { display: block; font-size: 12px; color: var(--text); margin-bottom: 5px; }
+        .setting-item select {
+            width: 100%;
+            background: #3c3c3c;
+            color: var(--text);
+            border: 1px solid var(--border);
+            padding: 5px;
+            font-size: 12px;
+        }
 
         #main-container { display: flex; flex: 1; overflow: hidden; }
         #explorer { width: 220px; background: var(--panel); border-right: 1px solid var(--border); font-size: 13px; flex-shrink: 0; }
@@ -65,10 +105,10 @@
         /* グラフオーバーレイ（リサイズ可能） */
         #graph-overlay { 
             position: fixed; 
-            top: 10%; 
-            left: 10%; 
-            width: 80%; 
-            height: 70%; 
+            top: 69px;
+            right: 20px; 
+            width: 400px; 
+            height: 300px; 
             background: var(--panel); 
             border: 1px solid var(--border); 
             box-shadow: 0 8px 32px rgba(0,0,0,0.5); 
@@ -76,9 +116,9 @@
             display: none;
             flex-direction: column;
             resize: both;
-            overflow: hidden;
-            min-width: 400px;
-            min-height: 300px;
+            overflow: auto;
+            min-width: 300px;
+            min-height: 200px;
         }
         #graph-overlay.active { display: flex; }
         #graph-header { 
@@ -124,7 +164,7 @@
         .header-row { 
             position: sticky; 
             top: 0; 
-            z-index: 100; 
+            z-index: 150; 
             display: grid; 
             grid-template-columns: 80px repeat(20, 60px); 
             gap: 1px; 
@@ -141,17 +181,30 @@
             font-size: 10px; 
             position: sticky; 
             left: 0; 
-            z-index: 50; 
+            z-index: 200;
             border-right: 2px solid var(--border); 
             border-bottom: 1px solid var(--border);
             width: 80px;
             height: 28px;
             box-sizing: border-box;
         }
-        .corner-cell { z-index: 150; position: sticky; left: 0; width: 80px; }
+        .corner-cell { z-index: 250; position: sticky; left: 0; width: 80px; }
         
-        .cell input { width: 100%; height: 100%; border: none; text-align: center; background: transparent; color: #fff; font-size: 12px; outline: none; }
-        .selected-cell { outline: 2px solid var(--accent) !important; z-index: 60; }
+        .cell input { width: 100%; height: 100%; border: none; text-align: center; background: transparent; font-size: 12px; outline: none; position: relative; z-index: 1; }
+        .cell input.diff-mode { color: #000; }
+        .cell input.heatmap-mode { color: #fff; }
+        .selected-cell { outline: 2px solid var(--accent) !important; z-index: 60; position: relative; }
+        .selected-cell::before {
+            content: '';
+            position: absolute;
+            top: -2px;
+            left: -2px;
+            right: -2px;
+            bottom: -2px;
+            border: 2px solid var(--accent);
+            pointer-events: none;
+            z-index: 1;
+        }
         .cross-highlight::after { content: ""; position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: transparent; border: 1px solid rgba(255,255,255,0.1); pointer-events: none; z-index: 1; }
 
         .btn { background: #333; color: #fff; border: 1px solid #555; padding: 4px 10px; cursor: pointer; font-size: 11px; margin-top: 5px; width: 100%; }
@@ -167,6 +220,19 @@
     <button class="toolbar-btn" data-tooltip="ECUから読み取り" onclick="readFromECU()">📥</button>
     <button class="toolbar-btn" data-tooltip="グラフ表示" onclick="toggleGraph()">📊</button>
     <span class="toolbar-title">ECU Map Studio - Kitaco S3 v1.0</span>
+    <button class="hamburger-menu" onclick="toggleSettings()">☰</button>
+</div>
+
+<!-- 設定メニュー -->
+<div id="settings-menu">
+    <h3>⚙️ 設定</h3>
+    <div class="setting-item">
+        <label>セル数値の色表示:</label>
+        <select id="cell-color-mode" onchange="updateCellColorMode()">
+            <option value="heatmap">ヒートマップ（青→緑→赤）</option>
+            <option value="diff">差分表示（編集: 赤/青）</option>
+        </select>
+    </div>
 </div>
 
 <div id="graph-overlay">
@@ -184,6 +250,7 @@
 </div>
 
 <input type="file" id="file-input" style="display:none" onchange="importFromCSV(this)">
+<input type="file" id="save-file-input" style="display:none" nwsaveas="fuel_map.csv">
 
 <div id="main-container">
     <div id="explorer">
@@ -223,7 +290,9 @@
     const RPM_AXIS = Array.from({length: 20}, (_, i) => 500 + i * 500);
     const TPS_AXIS = Array.from({length: 21}, (_, i) => i * 5);
     let fuelMap = [];
+    let originalFuelMap = []; // オリジナルデータ保存用
     let selT = 0, selR = 0;
+    let cellColorMode = 'heatmap'; // 'heatmap' or 'diff'
 
     // ツールバー関数
     window.openFile = function() {
@@ -231,15 +300,61 @@
     };
 
     window.saveFile = function() {
-        const link = document.createElement('a');
+        // 現在の日時でデフォルトファイル名を生成
+        const now = new Date();
+        const dateStr = now.getFullYear() + 
+                       String(now.getMonth() + 1).padStart(2, '0') + 
+                       String(now.getDate()).padStart(2, '0') + '_' +
+                       String(now.getHours()).padStart(2, '0') + 
+                       String(now.getMinutes()).padStart(2, '0');
+        const defaultName = `fuel_map_${dateStr}.csv`;
+        
+        // ファイル名入力ダイアログ
+        const fileName = prompt('保存するファイル名を入力してください:', defaultName);
+        
+        if (fileName === null || fileName.trim() === '') {
+            return; // キャンセルまたは空白の場合は保存しない
+        }
+        
+        // CSVデータを作成
         let csv = "TPS\\RPM," + RPM_AXIS.join(",") + "\n";
-        fuelMap.forEach((row, i) => { csv += TPS_AXIS[i] + "," + row.join(",") + "\n"; });
-        const blob = new Blob([csv], {type: 'text/csv'});
+        fuelMap.forEach((row, i) => { 
+            csv += TPS_AXIS[i] + "," + row.join(",") + "\n"; 
+        });
+        
+        // Blobを作成してダウンロード
+        const blob = new Blob([csv], {type: 'text/csv;charset=utf-8;'});
         const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
         link.href = url;
-        link.download = 'fuel_map.csv';
+        
+        // .csv拡張子がない場合は追加
+        const finalName = fileName.trim().endsWith('.csv') ? fileName.trim() : fileName.trim() + '.csv';
+        link.download = finalName;
+        
+        document.body.appendChild(link);
         link.click();
-        URL.revokeObjectURL(url);
+        document.body.removeChild(link);
+        
+        setTimeout(() => {
+            URL.revokeObjectURL(url);
+        }, 100);
+    };
+
+    window.toggleSettings = function() {
+        const menu = document.getElementById('settings-menu');
+        menu.classList.toggle('active');
+    };
+
+    window.updateCellColorMode = function() {
+        cellColorMode = document.getElementById('cell-color-mode').value;
+        
+        // オリジナルデータを保存（初回のみ）
+        if (originalFuelMap.length === 0) {
+            originalFuelMap = fuelMap.map(row => row.slice());
+        }
+        
+        renderTable();
     };
 
     window.writeToECU = function() {
@@ -258,16 +373,17 @@
         }
     };
 
-    // グラフウィンドウのドラッグ機能
+    // グラフウィンドウのドラッグ機能とリサイズ監視
     let isDragging = false;
     let currentX, currentY, initialX, initialY;
+    let resizeObserver;
 
     document.addEventListener('DOMContentLoaded', function() {
         const graphHeader = document.getElementById('graph-header');
         const graphOverlay = document.getElementById('graph-overlay');
 
         graphHeader.addEventListener('mousedown', function(e) {
-            if (e.target.id === 'graph-close') return;
+            if (e.target.id === 'graph-close' || e.target.id === 'graph-type') return;
             isDragging = true;
             initialX = e.clientX - graphOverlay.offsetLeft;
             initialY = e.clientY - graphOverlay.offsetTop;
@@ -280,48 +396,90 @@
                 currentY = e.clientY - initialY;
                 graphOverlay.style.left = currentX + 'px';
                 graphOverlay.style.top = currentY + 'px';
+                graphOverlay.style.right = 'auto';
             }
         });
 
         document.addEventListener('mouseup', function() {
             isDragging = false;
         });
+
+        // リサイズ監視
+        resizeObserver = new ResizeObserver(entries => {
+            for (let entry of entries) {
+                if (entry.target === graphOverlay && graphOverlay.classList.contains('active')) {
+                    // リサイズ後にグラフを再描画
+                    setTimeout(() => {
+                        updateGraph();
+                    }, 100);
+                }
+            }
+        });
+        
+        resizeObserver.observe(graphOverlay);
     });
 
     function initData() {
         for (let t = 0; t < 21; t++) {
             fuelMap[t] = [];
+            originalFuelMap[t] = [];
             for (let r = 0; r < 20; r++) {
-                fuelMap[t][r] = Math.floor(1000 + 800 * Math.sin(r/5) * Math.cos(t/10) + t*20);
+                const val = Math.floor(1000 + 800 * Math.sin(r/5) * Math.cos(t/10) + t*20);
+                fuelMap[t][r] = val;
+                originalFuelMap[t][r] = val;
             }
         }
     }
 
-    function getColor(val) {
-        let min = Infinity, max = -Infinity;
-        for (let t = 0; t < 21; t++) {
-            for (let r = 0; r < 20; r++) {
-                if (fuelMap[t][r] < min) min = fuelMap[t][r];
-                if (fuelMap[t][r] > max) max = fuelMap[t][r];
+    function getColor(val, t, r) {
+        if (cellColorMode === 'diff') {
+            // 差分表示モード
+            if (originalFuelMap.length === 0 || !originalFuelMap[t]) {
+                return 'rgb(255, 255, 255)'; // 初期値: 白
             }
-        }
-        
-        let p = (val - min) / (max - min);
-        p = Math.max(0, Math.min(1, p));
-        
-        let r, g, b;
-        if (p < 0.5) {
-            const t = p * 2;
-            r = 0;
-            g = Math.floor(128 * t);
-            b = Math.floor(255 * (1 - t));
+            const originalVal = originalFuelMap[t][r];
+            const diff = val - originalVal;
+            
+            if (diff === 0) {
+                return 'rgb(255, 255, 255)'; // 変更なし: 白
+            } else if (diff > 0) {
+                // プラス: 赤（差が大きいほど濃い）
+                const intensity = Math.min(Math.abs(diff) / 200, 1);
+                const colorValue = Math.floor(255 - 155 * intensity);
+                return `rgb(255, ${colorValue}, ${colorValue})`;
+            } else {
+                // マイナス: 青（差が大きいほど濃い）
+                const intensity = Math.min(Math.abs(diff) / 200, 1);
+                const colorValue = Math.floor(255 - 155 * intensity);
+                return `rgb(${colorValue}, ${colorValue}, 255)`;
+            }
         } else {
-            const t = (p - 0.5) * 2;
-            r = Math.floor(255 * t);
-            g = Math.floor(128 * (1 - t));
-            b = 0;
+            // ヒートマップモード
+            let min = Infinity, max = -Infinity;
+            for (let t = 0; t < 21; t++) {
+                for (let r = 0; r < 20; r++) {
+                    if (fuelMap[t][r] < min) min = fuelMap[t][r];
+                    if (fuelMap[t][r] > max) max = fuelMap[t][r];
+                }
+            }
+            
+            let p = (val - min) / (max - min);
+            p = Math.max(0, Math.min(1, p));
+            
+            let red, green, blue;
+            if (p < 0.5) {
+                const t = p * 2;
+                red = 0;
+                green = Math.floor(128 * t);
+                blue = Math.floor(255 * (1 - t));
+            } else {
+                const t = (p - 0.5) * 2;
+                red = Math.floor(255 * t);
+                green = Math.floor(128 * (1 - t));
+                blue = 0;
+            }
+            return `rgb(${red},${green},${blue})`;
         }
-        return `rgb(${r},${g},${b})`;
     }
 
     function renderTable() {
@@ -356,6 +514,7 @@
                 const input = document.createElement('input');
                 input.type = 'number';
                 input.value = fuelMap[t][r];
+                input.className = cellColorMode === 'diff' ? 'diff-mode' : 'heatmap-mode';
                 
                 input.onfocus = () => {
                     selT = t; selR = r;
