@@ -8,7 +8,6 @@
         :root { --accent: #0078d4; --bg: #1e1e1e; --panel: #252526; --border: #3c3c3c; --text: #cccccc; }
         body { font-family: 'Segoe UI', Tahoma, sans-serif; background: var(--bg); color: var(--text); margin: 0; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
         
-        /* ツールバー */
         #toolbar { background: #2d2d30; padding: 0; border-bottom: 1px solid var(--border); display: flex; align-items: center; height: 40px; }
         .toolbar-btn { 
             background: transparent; 
@@ -24,6 +23,7 @@
         }
         .toolbar-btn:hover { background: #3e3e42; }
         .toolbar-btn:active { background: #007acc; }
+        .toolbar-btn.active { background: #007acc; }
         .toolbar-btn::after {
             content: attr(data-tooltip);
             position: absolute;
@@ -42,12 +42,9 @@
             z-index: 10000;
             margin-top: 5px;
         }
-        .toolbar-btn:hover::after {
-            opacity: 1;
-        }
+        .toolbar-btn:hover::after { opacity: 1; }
         .toolbar-title { padding: 0 16px; font-size: 12px; color: #888; margin-left: auto; }
         
-        /* ハンバーガーメニュー */
         .hamburger-menu { 
             background: transparent; 
             border: none; 
@@ -60,8 +57,8 @@
             transition: background 0.2s;
         }
         .hamburger-menu:hover { background: #3e3e42; }
+        .hamburger-menu.active { background: #007acc; }
         
-        /* 設定メニュー */
         #settings-menu {
             position: fixed;
             top: 40px;
@@ -102,7 +99,6 @@
         #info-section h3 { margin: 0 0 10px 0; font-size: 11px; color: #888; text-transform: uppercase; }
         #info-content { color: var(--text); }
         
-        /* グラフオーバーレイ（リサイズ可能） */
         #graph-overlay { 
             position: fixed; 
             top: 69px;
@@ -142,22 +138,6 @@
         #graph-close:hover { color: #fff; background: #e81123; }
         #graph-body { flex: 1; display: flex; flex-direction: column; overflow: hidden; padding: 10px; }
         #chart-container { flex: 1; min-height: 0; }
-        #chart-controls { 
-            padding: 10px 0 0 0; 
-            display: flex; 
-            align-items: center; 
-            gap: 10px;
-        }
-        #chart-controls label { font-size: 12px; color: var(--text); }
-        #chart-controls select { 
-            background: #3c3c3c; 
-            color: var(--text); 
-            border: 1px solid var(--border); 
-            padding: 5px 10px; 
-            font-size: 12px;
-            cursor: pointer;
-        }
-        #chart-controls select:focus { outline: 2px solid var(--accent); }
         
         #table-wrapper { position: relative; min-height: 100%; }
         
@@ -174,8 +154,9 @@
         
         .grid-container { display: grid; grid-template-columns: 80px repeat(20, 60px); gap: 1px; background: var(--border); width: max-content; isolation: isolate; }
         
-        .cell { height: 28px; display: flex; align-items: center; justify-content: center; position: relative; background: #1a1a1a; box-sizing: border-box; }
+        .cell { height: 28px; display: flex; align-items: center; justify-content: center; position: relative; background: #1a1a1a; box-sizing: border-box; border: 1px solid transparent; }
         .header-cell { background: #2d2d2d !important; color: #fff; font-size: 10px; height: 28px; box-sizing: border-box; }
+        .header-cell.selected-header { background: #4a4a4a !important; color: #fff; }
         .label-cell { 
             background: #2d2d2d !important; 
             font-size: 10px; 
@@ -188,27 +169,26 @@
             height: 28px;
             box-sizing: border-box;
         }
+        .label-cell.selected-label { background: #4a4a4a !important; color: #fff; }
         .corner-cell { z-index: 250; position: sticky; left: 0; width: 80px; }
         
         .cell input { width: 100%; height: 100%; border: none; text-align: center; background: transparent; font-size: 12px; outline: none; position: relative; z-index: 1; }
         .cell input.diff-mode { color: #000; }
         .cell input.heatmap-mode { color: #fff; }
-        .selected-cell { outline: 2px solid var(--accent) !important; z-index: 60; position: relative; }
-        .selected-cell::before {
+        .selected-cell { position: relative; }
+        .selected-cell::after {
             content: '';
             position: absolute;
-            top: -2px;
-            left: -2px;
-            right: -2px;
-            bottom: -2px;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
             border: 2px solid var(--accent);
             pointer-events: none;
-            z-index: 1;
+            z-index: 2;
+            box-sizing: border-box;
         }
-        .cross-highlight::after { content: ""; position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: transparent; border: 1px solid rgba(255,255,255,0.1); pointer-events: none; z-index: 1; }
-
-        .btn { background: #333; color: #fff; border: 1px solid #555; padding: 4px 10px; cursor: pointer; font-size: 11px; margin-top: 5px; width: 100%; }
-        .btn:hover { background: #444; }
+        .cross-highlight::after { content: ""; position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255, 255, 0, 0.15); pointer-events: none; z-index: 1; }
     </style>
 </head>
 <body>
@@ -216,14 +196,15 @@
 <div id="toolbar">
     <button class="toolbar-btn" data-tooltip="ファイルを開く" onclick="openFile()">📁</button>
     <button class="toolbar-btn" data-tooltip="保存" onclick="saveFile()">💾</button>
+    <button class="toolbar-btn" data-tooltip="元に戻す" onclick="undo()" id="btn-undo">↶</button>
+    <button class="toolbar-btn" data-tooltip="やり直し" onclick="redo()" id="btn-redo">↷</button>
     <button class="toolbar-btn" data-tooltip="ECUに書き込み" onclick="writeToECU()">📤</button>
     <button class="toolbar-btn" data-tooltip="ECUから読み取り" onclick="readFromECU()">📥</button>
-    <button class="toolbar-btn" data-tooltip="グラフ表示" onclick="toggleGraph()">📊</button>
+    <button class="toolbar-btn" data-tooltip="グラフ表示" onclick="toggleGraph()" id="btn-graph">📊</button>
     <span class="toolbar-title">ECU Map Studio - Kitaco S3 v1.0</span>
-    <button class="hamburger-menu" onclick="toggleSettings()">☰</button>
+    <button class="hamburger-menu" onclick="toggleSettings()" id="btn-settings">☰</button>
 </div>
 
-<!-- 設定メニュー -->
 <div id="settings-menu">
     <h3>⚙️ 設定</h3>
     <div class="setting-item">
@@ -238,9 +219,9 @@
 <div id="graph-overlay">
     <div id="graph-header">
         <select id="graph-type" onchange="updateGraph()">
+            <option value="3d">3D: Surface</option>
             <option value="rpm">2D: vs RPM (Fix TPS)</option>
             <option value="tps">2D: vs TPS (Fix RPM)</option>
-            <option value="3d">3D: Surface</option>
         </select>
         <button id="graph-close" onclick="toggleGraph()">×</button>
     </div>
@@ -250,7 +231,6 @@
 </div>
 
 <input type="file" id="file-input" style="display:none" onchange="importFromCSV(this)">
-<input type="file" id="save-file-input" style="display:none" nwsaveas="fuel_map.csv">
 
 <div id="main-container">
     <div id="explorer">
@@ -290,17 +270,15 @@
     const RPM_AXIS = Array.from({length: 20}, (_, i) => 500 + i * 500);
     const TPS_AXIS = Array.from({length: 21}, (_, i) => i * 5);
     let fuelMap = [];
-    let originalFuelMap = []; // オリジナルデータ保存用
+    let originalFuelMap = [];
     let selT = 0, selR = 0;
-    let cellColorMode = 'heatmap'; // 'heatmap' or 'diff'
+    let cellColorMode = 'heatmap';
 
-    // ツールバー関数
     window.openFile = function() {
         document.getElementById('file-input').click();
     };
 
     window.saveFile = function() {
-        // 現在の日時でデフォルトファイル名を生成
         const now = new Date();
         const dateStr = now.getFullYear() + 
                        String(now.getMonth() + 1).padStart(2, '0') + 
@@ -309,51 +287,43 @@
                        String(now.getMinutes()).padStart(2, '0');
         const defaultName = `fuel_map_${dateStr}.csv`;
         
-        // ファイル名入力ダイアログ
         const fileName = prompt('保存するファイル名を入力してください:', defaultName);
         
         if (fileName === null || fileName.trim() === '') {
-            return; // キャンセルまたは空白の場合は保存しない
+            return;
         }
         
-        // CSVデータを作成
         let csv = "TPS\\RPM," + RPM_AXIS.join(",") + "\n";
         fuelMap.forEach((row, i) => { 
             csv += TPS_AXIS[i] + "," + row.join(",") + "\n"; 
         });
         
-        // Blobを作成してダウンロード
         const blob = new Blob([csv], {type: 'text/csv;charset=utf-8;'});
         const url = URL.createObjectURL(blob);
         const link = document.createElement('a');
         link.href = url;
         
-        // .csv拡張子がない場合は追加
         const finalName = fileName.trim().endsWith('.csv') ? fileName.trim() : fileName.trim() + '.csv';
         link.download = finalName;
         
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
-        
-        setTimeout(() => {
-            URL.revokeObjectURL(url);
-        }, 100);
+        setTimeout(() => URL.revokeObjectURL(url), 100);
     };
 
     window.toggleSettings = function() {
         const menu = document.getElementById('settings-menu');
+        const btn = document.getElementById('btn-settings');
         menu.classList.toggle('active');
+        btn.classList.toggle('active');
     };
 
     window.updateCellColorMode = function() {
         cellColorMode = document.getElementById('cell-color-mode').value;
-        
-        // オリジナルデータを保存（初回のみ）
         if (originalFuelMap.length === 0) {
             originalFuelMap = fuelMap.map(row => row.slice());
         }
-        
         renderTable();
     };
 
@@ -367,16 +337,24 @@
 
     window.toggleGraph = function() {
         const overlay = document.getElementById('graph-overlay');
+        const btn = document.getElementById('btn-graph');
         overlay.classList.toggle('active');
+        btn.classList.toggle('active');
         if (overlay.classList.contains('active')) {
             updateGraph();
         }
     };
 
-    // グラフウィンドウのドラッグ機能とリサイズ監視
+    window.undo = function() {
+        alert('元に戻す機能は未実装です');
+    };
+
+    window.redo = function() {
+        alert('やり直し機能は未実装です');
+    };
+
     let isDragging = false;
-    let currentX, currentY, initialX, initialY;
-    let resizeObserver;
+    let initialX, initialY;
 
     document.addEventListener('DOMContentLoaded', function() {
         const graphHeader = document.getElementById('graph-header');
@@ -392,10 +370,8 @@
         document.addEventListener('mousemove', function(e) {
             if (isDragging) {
                 e.preventDefault();
-                currentX = e.clientX - initialX;
-                currentY = e.clientY - initialY;
-                graphOverlay.style.left = currentX + 'px';
-                graphOverlay.style.top = currentY + 'px';
+                graphOverlay.style.left = (e.clientX - initialX) + 'px';
+                graphOverlay.style.top = (e.clientY - initialY) + 'px';
                 graphOverlay.style.right = 'auto';
             }
         });
@@ -404,18 +380,11 @@
             isDragging = false;
         });
 
-        // リサイズ監視
-        resizeObserver = new ResizeObserver(entries => {
-            for (let entry of entries) {
-                if (entry.target === graphOverlay && graphOverlay.classList.contains('active')) {
-                    // リサイズ後にグラフを再描画
-                    setTimeout(() => {
-                        updateGraph();
-                    }, 100);
-                }
+        const resizeObserver = new ResizeObserver(() => {
+            if (graphOverlay.classList.contains('active')) {
+                setTimeout(() => updateGraph(), 100);
             }
         });
-        
         resizeObserver.observe(graphOverlay);
     });
 
@@ -433,28 +402,24 @@
 
     function getColor(val, t, r) {
         if (cellColorMode === 'diff') {
-            // 差分表示モード
             if (originalFuelMap.length === 0 || !originalFuelMap[t]) {
-                return 'rgb(255, 255, 255)'; // 初期値: 白
+                return 'rgb(255, 255, 255)';
             }
             const originalVal = originalFuelMap[t][r];
             const diff = val - originalVal;
             
             if (diff === 0) {
-                return 'rgb(255, 255, 255)'; // 変更なし: 白
+                return 'rgb(255, 255, 255)';
             } else if (diff > 0) {
-                // プラス: 赤（差が大きいほど濃い）
                 const intensity = Math.min(Math.abs(diff) / 200, 1);
                 const colorValue = Math.floor(255 - 155 * intensity);
                 return `rgb(255, ${colorValue}, ${colorValue})`;
             } else {
-                // マイナス: 青（差が大きいほど濃い）
                 const intensity = Math.min(Math.abs(diff) / 200, 1);
                 const colorValue = Math.floor(255 - 155 * intensity);
                 return `rgb(${colorValue}, ${colorValue}, 255)`;
             }
         } else {
-            // ヒートマップモード
             let min = Infinity, max = -Infinity;
             for (let t = 0; t < 21; t++) {
                 for (let r = 0; r < 20; r++) {
@@ -526,7 +491,8 @@
                 
                 input.oninput = (e) => {
                     fuelMap[t][r] = parseInt(e.target.value) || 0;
-                    cell.style.background = getColor(fuelMap[t][r]);
+                    cell.style.background = getColor(fuelMap[t][r], t, r);
+                    updateUISelection();
                     if (document.getElementById('graph-overlay').classList.contains('active')) {
                         updateGraph();
                     }
@@ -544,46 +510,55 @@
                         
                         if(nt>=0 && nt<21 && nr>=0 && nr<20) {
                             const container = document.getElementById('map-section');
-                            const gridContainer = document.getElementById('mapGrid');
-                            const targetCellElement = document.getElementById(`c-${nt}-${nr}`);
-                            const colWidth = 61;
-                            const labelWidth = 80;
-                            
                             const target = document.querySelector(`#c-${nt}-${nr} input`);
+                            
+                            // フォーカスを移動（スクロールなし）
                             target.focus({preventScroll: true});
                             target.select();
                             
+                            // スクロール処理
+                            const targetCell = document.getElementById(`c-${nt}-${nr}`);
+                            const headerRow = document.getElementById('headerRow');
+                            
                             requestAnimationFrame(() => {
-                                const rect = targetCellElement.getBoundingClientRect();
+                                const cellRect = targetCell.getBoundingClientRect();
                                 const containerRect = container.getBoundingClientRect();
-                                const headerRow = document.getElementById('headerRow');
                                 const headerHeight = headerRow.offsetHeight;
-                                const targetTop = containerRect.top + headerHeight;
+                                const labelWidth = 80;
                                 
+                                // スクロールバーの高さを取得
+                                const scrollbarHeight = container.offsetHeight - container.clientHeight;
+                                
+                                // 上矢印：ヘッダーの直下に表示
                                 if (e.key === "ArrowUp") {
-                                    const offset = rect.top - targetTop;
-                                    if (Math.abs(offset) > 1) {
-                                        container.scrollTop = container.scrollTop + offset;
+                                    const visibleTop = containerRect.top + headerHeight;
+                                    if (cellRect.top < visibleTop) {
+                                        const scrollAmount = visibleTop - cellRect.top;
+                                        container.scrollTop -= scrollAmount;
                                     }
                                 }
+                                // 下矢印：コンテナの底部に表示（スクロールバーを考慮）
                                 else if (e.key === "ArrowDown") {
-                                    const actualBottom = containerRect.top + container.clientHeight;
-                                    
-                                    if (rect.bottom > actualBottom - 1) {
-                                        const overflow = rect.bottom - actualBottom;
-                                        container.scrollTop = container.scrollTop + overflow + 2;
+                                    const visibleBottom = containerRect.bottom - scrollbarHeight;
+                                    if (cellRect.bottom > visibleBottom) {
+                                        const scrollAmount = cellRect.bottom - visibleBottom;
+                                        container.scrollTop += scrollAmount;
                                     }
                                 }
+                                // 左矢印：ラベル列の右側に表示
                                 else if (e.key === "ArrowLeft") {
-                                    if (rect.left < containerRect.left + labelWidth) {
-                                        const targetScrollLeft = (nr) * colWidth;
-                                        container.scrollLeft = targetScrollLeft;
+                                    const visibleLeft = containerRect.left + labelWidth;
+                                    if (cellRect.left < visibleLeft) {
+                                        const scrollAmount = visibleLeft - cellRect.left;
+                                        container.scrollLeft -= scrollAmount;
                                     }
                                 }
+                                // 右矢印：コンテナの右端に表示
                                 else if (e.key === "ArrowRight") {
-                                    if (rect.right > containerRect.right) {
-                                        const overflow = rect.right - containerRect.right;
-                                        container.scrollLeft = container.scrollLeft + overflow;
+                                    const visibleRight = containerRect.right;
+                                    if (cellRect.right > visibleRight) {
+                                        const scrollAmount = cellRect.right - visibleRight;
+                                        container.scrollLeft += scrollAmount;
                                     }
                                 }
                             });
@@ -591,7 +566,7 @@
                     }
                 });
                 
-                cell.style.background = getColor(fuelMap[t][r]);
+                cell.style.background = getColor(fuelMap[t][r], t, r);
                 cell.appendChild(input);
                 grid.appendChild(cell);
             });
@@ -601,21 +576,33 @@
 
     function updateUISelection() {
         document.querySelectorAll('.cell').forEach(c => c.classList.remove('selected-cell', 'cross-highlight'));
+        document.querySelectorAll('.header-cell').forEach(h => h.classList.remove('selected-header'));
+        document.querySelectorAll('.label-cell').forEach(l => l.classList.remove('selected-label'));
+        
         const selectedCell = document.getElementById(`c-${selT}-${selR}`);
         if (selectedCell) {
             selectedCell.classList.add('selected-cell');
             for(let r=0; r<20; r++) {
                 const cell = document.getElementById(`c-${selT}-${r}`);
-                if (cell) {
-                    cell.classList.add('cross-highlight');
-                }
+                if (cell) cell.classList.add('cross-highlight');
             }
             for(let t=0; t<21; t++) {
                 const cell = document.getElementById(`c-${t}-${selR}`);
-                if (cell) {
-                    cell.classList.add('cross-highlight');
-                }
+                if (cell) cell.classList.add('cross-highlight');
             }
+        }
+        
+        // 選択されたRPMヘッダーを明るくする
+        const headerCells = document.getElementById('headerRow').children;
+        if (headerCells[selR + 1]) {
+            headerCells[selR + 1].classList.add('selected-header');
+        }
+        
+        // 選択されたTPSラベルを明るくする
+        const gridCells = document.getElementById('mapGrid').children;
+        const labelIndex = selT * 21; // 各行は21個のセル（1個のラベル + 20個のデータセル）
+        if (gridCells[labelIndex]) {
+            gridCells[labelIndex].classList.add('selected-label');
         }
         
         document.getElementById('info-cell').innerText = `RPM: ${RPM_AXIS[selR]}, TPS: ${TPS_AXIS[selT]}%`;
@@ -641,7 +628,8 @@
             paper_bgcolor: '#1e1e1e', plot_bgcolor: '#1e1e1e',
             margin: {t:20, l:50, r:20, b:50},
             font: {color: '#888', size: 10},
-            xaxis: {gridcolor: '#333', zeroline: false}, yaxis: {gridcolor: '#333', zeroline: false}
+            xaxis: {gridcolor: '#333', zeroline: false}, 
+            yaxis: {gridcolor: '#333', zeroline: false}
         };
 
         if (mode === '3d') {
@@ -653,23 +641,25 @@
                 xaxis: {title:'RPM'}, 
                 yaxis: {title:'TPS'}, 
                 zaxis: {title:'Fuel'},
-                camera: {eye: {x: 1.5, y: 1.5, z: 1.3}}
+                camera: {eye: {x: 1.3, y: 1.3, z: 1.5}}
             };
-            layout.margin = {t:10, l:10, r:10, b:10};
+            layout.margin = {t:5, l:5, r:5, b:15};
         } else if (mode === 'tps') {
             traces = [{
                 x: TPS_AXIS, y: fuelMap.map(row => row[selR]),
                 type: 'scatter', mode: 'lines+markers', 
                 line: {color: '#0078d4', shape: 'linear'}
             }];
-            layout.xaxis.title = "TPS (%)"; layout.yaxis.title = "Fuel (μs)";
+            layout.xaxis.title = "TPS (%)"; 
+            layout.yaxis.title = "Fuel (μs)";
         } else {
             traces = [{
                 x: RPM_AXIS, y: fuelMap[selT],
                 type: 'scatter', mode: 'lines+markers', 
                 line: {color: '#0078d4', shape: 'linear'}
             }];
-            layout.xaxis.title = "RPM"; layout.yaxis.title = "Fuel (μs)";
+            layout.xaxis.title = "RPM"; 
+            layout.yaxis.title = "Fuel (μs)";
         }
 
         Plotly.newPlot('chart-container', traces, layout, {responsive: true, displayModeBar: false});
@@ -691,6 +681,7 @@
                     });
                 }
             });
+            originalFuelMap = fuelMap.map(row => row.slice());
             renderTable();
             if (document.getElementById('graph-overlay').classList.contains('active')) {
                 updateGraph();
@@ -702,9 +693,6 @@
     window.onload = () => { 
         initData(); 
         renderTable(); 
-        if (document.getElementById('graph-overlay').classList.contains('active')) {
-            updateGraph();
-        }
     };
 </script>
 </body>
