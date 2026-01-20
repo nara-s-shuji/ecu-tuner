@@ -125,6 +125,9 @@
             align-items: center;
             border-bottom: 1px solid var(--border);
             cursor: move;
+            flex-shrink: 0;
+            z-index: 1;
+            position: relative;
         }
         #graph-close { 
             background: transparent; 
@@ -136,8 +139,23 @@
             line-height: 1;
         }
         #graph-close:hover { color: #fff; background: #e81123; }
-        #graph-body { flex: 1; display: flex; flex-direction: column; overflow: hidden; padding: 10px; }
-        #chart-container { flex: 1; min-height: 0; }
+        #graph-body { 
+            flex: 1; 
+            display: flex; 
+            flex-direction: column; 
+            overflow: hidden; 
+            padding: 10px; 
+            position: relative; 
+            z-index: 1;
+            pointer-events: none;
+        }
+        #chart-container { 
+            flex: 1; 
+            min-height: 0; 
+            position: relative; 
+            z-index: 0; 
+            pointer-events: auto; 
+        }
         
         #table-wrapper { position: relative; min-height: 100%; }
         
@@ -181,6 +199,12 @@
         .cell input[type=number] {
             -moz-appearance: textfield;
         }
+        .cell input {
+            user-select: none;
+            -webkit-user-select: none;
+            -moz-user-select: none;
+            -ms-user-select: none;
+        }
         .cell input.diff-mode { color: #000; }
         .cell input.heatmap-mode { color: #fff; }
         .selected-cell { position: relative; }
@@ -196,6 +220,19 @@
             z-index: 2;
             box-sizing: border-box;
         }
+        .multi-selected-cell::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 120, 212, 0.3);
+            border: 1px solid var(--accent);
+            pointer-events: none;
+            z-index: 2;
+            box-sizing: border-box;
+        }
         .cross-highlight::after { content: ""; position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255, 255, 0, 0.15); pointer-events: none; z-index: 1; }
 
         /* セル編集ポップアップ */
@@ -205,7 +242,7 @@
             border: 1px solid var(--accent);
             box-shadow: 0 4px 12px rgba(0,0,0,0.6);
             padding: 10px;
-            z-index: 3000;
+            z-index: 500;
             display: none;
             min-width: 120px;
             font-size: 12px;
@@ -245,6 +282,7 @@
             cursor: pointer;
             font-size: 16px;
             font-weight: bold;
+            opacity: 1;
         }
         .popup-btn:hover { background: #4c4c4c; }
         .popup-input {
@@ -262,6 +300,7 @@
 
 <div id="toolbar">
     <button class="toolbar-btn" data-tooltip="ファイルを開く" onclick="openFile()">📁</button>
+    <button class="toolbar-btn" data-tooltip="基準ファイルを開く" onclick="openBaseFile()">📋</button>
     <button class="toolbar-btn" data-tooltip="保存" onclick="saveFile()">💾</button>
     <button class="toolbar-btn" data-tooltip="元に戻す" onclick="undo()" id="btn-undo">↶</button>
     <button class="toolbar-btn" data-tooltip="やり直し" onclick="redo()" id="btn-redo">↷</button>
@@ -277,8 +316,8 @@
     <div class="setting-item">
         <label>セル数値の色表示:</label>
         <select id="cell-color-mode" onchange="updateCellColorMode()">
-            <option value="heatmap">ヒートマップ（青→緑→赤）</option>
             <option value="diff">差分表示（編集: 赤/青）</option>
+            <option value="heatmap">ヒートマップ（青→緑→赤）</option>
         </select>
     </div>
 </div>
@@ -295,9 +334,19 @@
     <div id="graph-body">
         <div id="chart-container"></div>
     </div>
+    
+    <div class="resize-handle resize-n" style="position: absolute; top: 0; left: 0; right: 0; height: 15px; cursor: ns-resize; z-index: 999999;"></div>
+    <div class="resize-handle resize-s" style="position: absolute; bottom: 0; left: 0; right: 0; height: 15px; cursor: ns-resize; z-index: 999999;"></div>
+    <div class="resize-handle resize-e" style="position: absolute; right: 0; top: 0; bottom: 0; width: 15px; cursor: ew-resize; z-index: 999999;"></div>
+    <div class="resize-handle resize-w" style="position: absolute; left: 0; top: 0; bottom: 0; width: 15px; cursor: ew-resize; z-index: 999999;"></div>
+    <div class="resize-handle resize-ne" style="position: absolute; top: 0; right: 0; width: 25px; height: 25px; cursor: nesw-resize; z-index: 999999;"></div>
+    <div class="resize-handle resize-nw" style="position: absolute; top: 0; left: 0; width: 25px; height: 25px; cursor: nwse-resize; z-index: 999999;"></div>
+    <div class="resize-handle resize-se" style="position: absolute; bottom: 0; right: 0; width: 25px; height: 25px; cursor: nwse-resize; z-index: 999999;"></div>
+    <div class="resize-handle resize-sw" style="position: absolute; bottom: 0; left: 0; width: 25px; height: 25px; cursor: nesw-resize; z-index: 999999;"></div>
 </div>
 
 <input type="file" id="file-input" style="display:none" onchange="importFromCSV(this)">
+<input type="file" id="base-file-input" style="display:none" onchange="importBaseFromCSV(this)">
 
 <!-- セル編集ポップアップ -->
 <div id="cell-popup">
@@ -307,7 +356,7 @@
     </div>
     <div class="popup-controls">
         <button class="popup-btn" onclick="adjustCellValue(-1)">▽</button>
-        <input type="number" class="popup-input" id="popup-delta" value="10" step="1" min="0">
+        <input type="number" class="popup-input" id="popup-delta" value="10" step="1" min="1">
         <button class="popup-btn" onclick="adjustCellValue(1)">△</button>
     </div>
 </div>
@@ -354,7 +403,12 @@
     let fuelMap = [];
     let originalFuelMap = [];
     let selT = 0, selR = 0;
-    let cellColorMode = 'heatmap';
+    let cellColorMode = 'diff';
+    
+    // 複数セル選択
+    let selectedCells = new Set(); // "t-r"形式で保存
+    let selectionStart = null; // {t, r}
+    let isSelecting = false;
     
     // 履歴管理
     let history = [];
@@ -368,6 +422,10 @@
 
     window.openFile = function() {
         document.getElementById('file-input').click();
+    };
+    
+    window.openBaseFile = function() {
+        document.getElementById('base-file-input').click();
     };
 
     window.saveFile = function() {
@@ -434,6 +492,10 @@
         btn.classList.toggle('active');
         if (overlay.classList.contains('active')) {
             updateGraph();
+            // グラフ表示時にリサイズハンドルを初期化
+            setTimeout(() => {
+                initGraphResizeHandles();
+            }, 100);
         }
     };
 
@@ -451,10 +513,12 @@
     window.switchPopupMode = function(mode) {
         // 現在のモードの値を保存
         const deltaInput = document.getElementById('popup-delta');
+        const currentValue = parseFloat(deltaInput.value);
+        
         if (popupMode === 'abs') {
-            popupDeltaAbs = parseFloat(deltaInput.value) || 10;
+            popupDeltaAbs = isNaN(currentValue) ? 10 : Math.round(currentValue);
         } else {
-            popupDeltaPct = parseFloat(deltaInput.value) || 1.0;
+            popupDeltaPct = isNaN(currentValue) ? 1.0 : currentValue;
         }
         
         // モードを切り替え
@@ -464,51 +528,59 @@
         
         // 保存されている値を復元
         if (mode === 'abs') {
-            deltaInput.value = popupDeltaAbs;
+            deltaInput.value = Math.round(popupDeltaAbs);
             deltaInput.step = '1';
+            deltaInput.min = '1';
         } else {
             deltaInput.value = popupDeltaPct.toFixed(1);
             deltaInput.step = '0.1';
+            deltaInput.min = '0.1';
         }
     };
 
     window.adjustCellValue = function(direction) {
         const deltaInput = document.getElementById('popup-delta');
-        const deltaValue = parseFloat(deltaInput.value) || 0;
+        let deltaValue = parseFloat(deltaInput.value);
         
-        // 入力値を保存（%モードの場合は小数点1位まで）
-        if (popupMode === 'abs') {
-            popupDeltaAbs = deltaValue;
-            deltaInput.value = deltaValue;
-        } else {
+        if (isNaN(deltaValue) || deltaValue === 0) return;
+        
+        // 値を保存して表示を更新
+        if (popupMode === 'pct') {
             popupDeltaPct = deltaValue;
-            // %モード時は常に小数点1位まで表示
+            // %モードでは常に小数点1位まで表示
             deltaInput.value = deltaValue.toFixed(1);
-        }
-        
-        if (deltaValue === 0) return;
-        
-        const currentValue = fuelMap[selT][selR];
-        const originalValue = originalFuelMap[selT][selR];
-        let newValue;
-        
-        if (popupMode === 'abs') {
-            // 絶対値での増減
-            newValue = currentValue + (direction * deltaValue);
         } else {
-            // オリジナル値の指定%分を現在値に加減
-            const changeAmount = Math.round(originalValue * deltaValue / 100);
-            newValue = currentValue + (direction * changeAmount);
+            popupDeltaAbs = deltaValue;
         }
         
-        fuelMap[selT][selR] = Math.round(newValue);
+        // 選択されている全セルに対して適用
+        const cellsToUpdate = selectedCells.size > 0 ? Array.from(selectedCells) : [`${selT}-${selR}`];
         
-        const input = document.querySelector(`#c-${selT}-${selR} input`);
-        if (input) {
-            input.value = fuelMap[selT][selR];
-            const cell = document.getElementById(`c-${selT}-${selR}`);
-            cell.style.background = getColor(fuelMap[selT][selR], selT, selR);
-        }
+        cellsToUpdate.forEach(key => {
+            const [t, r] = key.split('-').map(Number);
+            const currentValue = fuelMap[t][r];
+            const originalValue = originalFuelMap[t][r];
+            let newValue;
+            
+            if (popupMode === 'abs') {
+                // 絶対値での増減
+                newValue = currentValue + (direction * deltaValue);
+            } else {
+                // 各セルのオリジナル値の指定%分を現在値に加減
+                const changeAmount = Math.round(originalValue * deltaValue / 100);
+                newValue = currentValue + (direction * changeAmount);
+            }
+            
+            fuelMap[t][r] = Math.round(newValue);
+            
+            // セルの表示を更新
+            const input = document.querySelector(`#c-${t}-${r} input`);
+            if (input) {
+                input.value = fuelMap[t][r];
+                const cell = document.getElementById(`c-${t}-${r}`);
+                cell.style.background = getColor(fuelMap[t][r], t, r);
+            }
+        });
         
         updateUISelection();
         saveHistory();
@@ -664,6 +736,11 @@
         // スクロール時にポップアップ位置を更新
         const mapSection = document.getElementById('map-section');
         mapSection.addEventListener('scroll', updatePopupPosition);
+        
+        // マウスアップで選択終了
+        document.addEventListener('mouseup', () => {
+            isSelecting = false;
+        });
     });
 
     function initData() {
@@ -759,6 +836,67 @@
                 input.type = 'number';
                 input.value = fuelMap[t][r];
                 input.className = cellColorMode === 'diff' ? 'diff-mode' : 'heatmap-mode';
+                
+                // セル選択処理
+                cell.addEventListener('mousedown', (e) => {
+                    e.preventDefault(); // テキスト選択を防止
+                    
+                    if (e.ctrlKey || e.metaKey) {
+                        // Ctrl+クリック: 個別選択/解除
+                        e.preventDefault();
+                        const key = `${t}-${r}`;
+                        if (selectedCells.has(key)) {
+                            selectedCells.delete(key);
+                        } else {
+                            selectedCells.add(key);
+                        }
+                        selT = t; selR = r;
+                        updateUISelection();
+                    } else if (e.shiftKey) {
+                        // Shift+クリック: 範囲選択
+                        e.preventDefault();
+                        if (selectionStart) {
+                            const minT = Math.min(selectionStart.t, t);
+                            const maxT = Math.max(selectionStart.t, t);
+                            const minR = Math.min(selectionStart.r, r);
+                            const maxR = Math.max(selectionStart.r, r);
+                            
+                            selectedCells.clear();
+                            for (let ti = minT; ti <= maxT; ti++) {
+                                for (let ri = minR; ri <= maxR; ri++) {
+                                    selectedCells.add(`${ti}-${ri}`);
+                                }
+                            }
+                        }
+                        selT = t; selR = r;
+                        updateUISelection();
+                    } else {
+                        // 通常クリック: 単一選択
+                        selectedCells.clear();
+                        selectedCells.add(`${t}-${r}`);
+                        selectionStart = {t, r};
+                        isSelecting = true;
+                    }
+                });
+                
+                // ドラッグ選択
+                cell.addEventListener('mouseenter', (e) => {
+                    if (isSelecting && selectionStart) {
+                        const minT = Math.min(selectionStart.t, t);
+                        const maxT = Math.max(selectionStart.t, t);
+                        const minR = Math.min(selectionStart.r, r);
+                        const maxR = Math.max(selectionStart.r, r);
+                        
+                        selectedCells.clear();
+                        for (let ti = minT; ti <= maxT; ti++) {
+                            for (let ri = minR; ri <= maxR; ri++) {
+                                selectedCells.add(`${ti}-${ri}`);
+                            }
+                        }
+                        selT = t; selR = r;
+                        updateUISelection();
+                    }
+                });
                 
                 input.onfocus = () => {
                     selT = t; selR = r;
@@ -909,9 +1047,18 @@
     }
 
     function updateUISelection() {
-        document.querySelectorAll('.cell').forEach(c => c.classList.remove('selected-cell', 'cross-highlight'));
+        document.querySelectorAll('.cell').forEach(c => c.classList.remove('selected-cell', 'cross-highlight', 'multi-selected-cell'));
         document.querySelectorAll('.header-cell').forEach(h => h.classList.remove('selected-header'));
         document.querySelectorAll('.label-cell').forEach(l => l.classList.remove('selected-label'));
+        
+        // 複数選択されたセルをハイライト
+        selectedCells.forEach(key => {
+            const [ct, cr] = key.split('-').map(Number);
+            const cell = document.getElementById(`c-${ct}-${cr}`);
+            if (cell) {
+                cell.classList.add('multi-selected-cell');
+            }
+        });
         
         const selectedCell = document.getElementById(`c-${selT}-${selR}`);
         if (selectedCell) {
@@ -945,7 +1092,13 @@
         const change = currentValue - originalValue;
         const changePercent = originalValue !== 0 ? ((change / originalValue) * 100).toFixed(1) : '0.0';
         
-        document.getElementById('info-cell').innerText = `RPM: ${RPM_AXIS[selR]}, TPS: ${TPS_AXIS[selT]}%`;
+        const cellCount = selectedCells.size;
+        if (cellCount > 1) {
+            document.getElementById('info-cell').innerText = `${cellCount} cells selected (Main: RPM ${RPM_AXIS[selR]}, TPS ${TPS_AXIS[selT]}%)`;
+        } else {
+            document.getElementById('info-cell').innerText = `RPM: ${RPM_AXIS[selR]}, TPS: ${TPS_AXIS[selT]}%`;
+        }
+        
         document.getElementById('info-value').innerText = currentValue;
         document.getElementById('info-original').innerText = originalValue;
         
@@ -1038,11 +1191,119 @@
         };
         reader.readAsText(file);
     }
+    
+    function importBaseFromCSV(input) {
+        const file = input.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            const lines = e.target.result.split('\n').filter(l => l.trim());
+            lines.shift();
+            lines.forEach((line, t) => {
+                const values = line.split(',');
+                values.shift();
+                if (t < 21) {
+                    values.forEach((val, r) => {
+                        if (r < 20) originalFuelMap[t][r] = parseInt(val) || 0;
+                    });
+                }
+            });
+            renderTable();
+            updateUISelection();
+        };
+        reader.readAsText(file);
+    }
 
     window.onload = () => { 
         initData(); 
-        renderTable(); 
+        renderTable();
     };
+    
+    let graphResizeInitialized = false;
+    
+    function initGraphResizeHandles() {
+        if (graphResizeInitialized) return;
+        
+        const graphOverlay = document.getElementById('graph-overlay');
+        
+        // リサイズハンドル
+        const handles = ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'];
+        handles.forEach(dir => {
+            const handle = graphOverlay.querySelector(`.resize-${dir}`);
+            if (handle) {
+                handle.onmousedown = function(e) {
+                    e.preventDefault();
+                    
+                    isResizing = true;
+                    resizeDirection = dir;
+                    resizeStartX = e.clientX;
+                    resizeStartY = e.clientY;
+                    const overlay = document.getElementById('graph-overlay');
+                    resizeStartWidth = overlay.offsetWidth;
+                    resizeStartHeight = overlay.offsetHeight;
+                    resizeStartLeft = overlay.offsetLeft;
+                    resizeStartTop = overlay.offsetTop;
+                    
+                    // ドキュメント全体でmousemoveとmouseupを監視
+                    const onMouseMove = function(e) {
+                        if (!isResizing) return;
+                        e.preventDefault();
+                        
+                        const deltaX = e.clientX - resizeStartX;
+                        const deltaY = e.clientY - resizeStartY;
+                        const overlay = document.getElementById('graph-overlay');
+                        
+                        let newWidth = resizeStartWidth;
+                        let newHeight = resizeStartHeight;
+                        let newLeft = resizeStartLeft;
+                        let newTop = resizeStartTop;
+                        
+                        if (resizeDirection.includes('e')) {
+                            newWidth = Math.max(300, resizeStartWidth + deltaX);
+                        }
+                        if (resizeDirection.includes('w')) {
+                            const potentialWidth = resizeStartWidth - deltaX;
+                            if (potentialWidth >= 300) {
+                                newWidth = potentialWidth;
+                                newLeft = resizeStartLeft + deltaX;
+                            }
+                        }
+                        if (resizeDirection.includes('s')) {
+                            newHeight = Math.max(200, resizeStartHeight + deltaY);
+                        }
+                        if (resizeDirection.includes('n')) {
+                            const potentialHeight = resizeStartHeight - deltaY;
+                            if (potentialHeight >= 200) {
+                                newHeight = potentialHeight;
+                                newTop = resizeStartTop + deltaY;
+                            }
+                        }
+                        
+                        overlay.style.width = newWidth + 'px';
+                        overlay.style.height = newHeight + 'px';
+                        overlay.style.left = newLeft + 'px';
+                        overlay.style.top = newTop + 'px';
+                        overlay.style.right = 'auto';
+                        overlay.style.bottom = 'auto';
+                        
+                        updateGraph();
+                    };
+                    
+                    const onMouseUp = function(e) {
+                        isResizing = false;
+                        resizeDirection = '';
+                        document.removeEventListener('mousemove', onMouseMove);
+                        document.removeEventListener('mouseup', onMouseUp);
+                    };
+                    
+                    document.addEventListener('mousemove', onMouseMove);
+                    document.addEventListener('mouseup', onMouseUp);
+                };
+            }
+        });
+        
+        graphResizeInitialized = true;
+    }
 </script>
 </body>
 </html>
