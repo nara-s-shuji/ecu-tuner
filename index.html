@@ -173,6 +173,14 @@
         .corner-cell { z-index: 250; position: sticky; left: 0; width: 80px; }
         
         .cell input { width: 100%; height: 100%; border: none; text-align: center; background: transparent; font-size: 12px; outline: none; position: relative; z-index: 1; }
+        .cell input::-webkit-outer-spin-button,
+        .cell input::-webkit-inner-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+        .cell input[type=number] {
+            -moz-appearance: textfield;
+        }
         .cell input.diff-mode { color: #000; }
         .cell input.heatmap-mode { color: #fff; }
         .selected-cell { position: relative; }
@@ -189,6 +197,65 @@
             box-sizing: border-box;
         }
         .cross-highlight::after { content: ""; position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255, 255, 0, 0.15); pointer-events: none; z-index: 1; }
+
+        /* セル編集ポップアップ */
+        #cell-popup {
+            position: fixed;
+            background: var(--panel);
+            border: 1px solid var(--accent);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.6);
+            padding: 10px;
+            z-index: 3000;
+            display: none;
+            min-width: 120px;
+            font-size: 12px;
+        }
+        #cell-popup.active { display: block; }
+        .popup-mode-selector {
+            display: flex;
+            gap: 5px;
+            margin-bottom: 8px;
+        }
+        .popup-mode-btn {
+            flex: 1;
+            background: #3c3c3c;
+            color: var(--text);
+            border: 1px solid var(--border);
+            padding: 4px 8px;
+            cursor: pointer;
+            font-size: 11px;
+        }
+        .popup-mode-btn.active {
+            background: var(--accent);
+            color: #fff;
+        }
+        .popup-mode-btn:hover { background: #4c4c4c; }
+        .popup-mode-btn.active:hover { background: #0087e8; }
+        .popup-controls {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-top: 5px;
+        }
+        .popup-btn {
+            background: #3c3c3c;
+            color: var(--text);
+            border: 1px solid var(--border);
+            padding: 6px 12px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: bold;
+        }
+        .popup-btn:hover { background: #4c4c4c; }
+        .popup-input {
+            width: 60px;
+            background: #3c3c3c;
+            color: var(--text);
+            border: 1px solid var(--border);
+            padding: 4px;
+            text-align: center;
+            font-size: 12px;
+        }
     </style>
 </head>
 <body>
@@ -232,6 +299,19 @@
 
 <input type="file" id="file-input" style="display:none" onchange="importFromCSV(this)">
 
+<!-- セル編集ポップアップ -->
+<div id="cell-popup">
+    <div class="popup-mode-selector">
+        <button class="popup-mode-btn active" id="mode-abs" onclick="switchPopupMode('abs')">絶対値</button>
+        <button class="popup-mode-btn" id="mode-pct" onclick="switchPopupMode('pct')">%</button>
+    </div>
+    <div class="popup-controls">
+        <button class="popup-btn" onclick="adjustCellValue(-1)">▽</button>
+        <input type="number" class="popup-input" id="popup-delta" value="10" step="1" min="0">
+        <button class="popup-btn" onclick="adjustCellValue(1)">△</button>
+    </div>
+</div>
+
 <div id="main-container">
     <div id="explorer">
         <div class="explorer-header">EXPLORER: PROJECT</div>
@@ -259,7 +339,9 @@
             <h3>📋 Information</h3>
             <div id="info-content">
                 <p style="margin: 5px 0;"><strong>Selected Cell:</strong> <span id="info-cell">-</span></p>
-                <p style="margin: 5px 0;"><strong>Value:</strong> <span id="info-value">-</span> μs</p>
+                <p style="margin: 5px 0;"><strong>Current Value:</strong> <span id="info-value">-</span> μs</p>
+                <p style="margin: 5px 0;"><strong>Original Value:</strong> <span id="info-original">-</span> μs</p>
+                <p style="margin: 5px 0;"><strong>Change:</strong> <span id="info-change">-</span> (<span id="info-change-percent">-</span>)</p>
                 <p style="margin: 5px 0;"><strong>Map Range:</strong> <span id="info-range">-</span></p>
             </div>
         </div>
@@ -273,6 +355,16 @@
     let originalFuelMap = [];
     let selT = 0, selR = 0;
     let cellColorMode = 'heatmap';
+    
+    // 履歴管理
+    let history = [];
+    let historyIndex = -1;
+    const MAX_HISTORY = 50;
+    
+    // ポップアップモード
+    let popupMode = 'abs'; // 'abs' or 'pct'
+    let popupDeltaAbs = 10; // 絶対値モードの値を保存
+    let popupDeltaPct = 1.0; // %モードの値を保存
 
     window.openFile = function() {
         document.getElementById('file-input').click();
@@ -346,12 +438,194 @@
     };
 
     window.undo = function() {
-        alert('元に戻す機能は未実装です');
+        if (historyIndex > 0) {
+            historyIndex--;
+            fuelMap = JSON.parse(JSON.stringify(history[historyIndex]));
+            renderTable();
+            if (document.getElementById('graph-overlay').classList.contains('active')) {
+                updateGraph();
+            }
+        }
     };
 
-    window.redo = function() {
-        alert('やり直し機能は未実装です');
+    window.switchPopupMode = function(mode) {
+        // 現在のモードの値を保存
+        const deltaInput = document.getElementById('popup-delta');
+        if (popupMode === 'abs') {
+            popupDeltaAbs = parseFloat(deltaInput.value) || 10;
+        } else {
+            popupDeltaPct = parseFloat(deltaInput.value) || 1.0;
+        }
+        
+        // モードを切り替え
+        popupMode = mode;
+        document.getElementById('mode-abs').classList.toggle('active', mode === 'abs');
+        document.getElementById('mode-pct').classList.toggle('active', mode === 'pct');
+        
+        // 保存されている値を復元
+        if (mode === 'abs') {
+            deltaInput.value = popupDeltaAbs;
+            deltaInput.step = '1';
+        } else {
+            deltaInput.value = popupDeltaPct.toFixed(1);
+            deltaInput.step = '0.1';
+        }
     };
+
+    window.adjustCellValue = function(direction) {
+        const deltaInput = document.getElementById('popup-delta');
+        const deltaValue = parseFloat(deltaInput.value) || 0;
+        
+        // 入力値を保存（%モードの場合は小数点1位まで）
+        if (popupMode === 'abs') {
+            popupDeltaAbs = deltaValue;
+            deltaInput.value = deltaValue;
+        } else {
+            popupDeltaPct = deltaValue;
+            // %モード時は常に小数点1位まで表示
+            deltaInput.value = deltaValue.toFixed(1);
+        }
+        
+        if (deltaValue === 0) return;
+        
+        const currentValue = fuelMap[selT][selR];
+        const originalValue = originalFuelMap[selT][selR];
+        let newValue;
+        
+        if (popupMode === 'abs') {
+            // 絶対値での増減
+            newValue = currentValue + (direction * deltaValue);
+        } else {
+            // オリジナル値の指定%分を現在値に加減
+            const changeAmount = Math.round(originalValue * deltaValue / 100);
+            newValue = currentValue + (direction * changeAmount);
+        }
+        
+        fuelMap[selT][selR] = Math.round(newValue);
+        
+        const input = document.querySelector(`#c-${selT}-${selR} input`);
+        if (input) {
+            input.value = fuelMap[selT][selR];
+            const cell = document.getElementById(`c-${selT}-${selR}`);
+            cell.style.background = getColor(fuelMap[selT][selR], selT, selR);
+        }
+        
+        updateUISelection();
+        saveHistory();
+        
+        if (document.getElementById('graph-overlay').classList.contains('active')) {
+            updateGraph();
+        }
+    };
+    
+    window.redo = function() {
+        if (historyIndex < history.length - 1) {
+            historyIndex++;
+            fuelMap = JSON.parse(JSON.stringify(history[historyIndex]));
+            renderTable();
+            if (document.getElementById('graph-overlay').classList.contains('active')) {
+                updateGraph();
+            }
+        }
+    };
+    
+    function updatePopupPosition() {
+        const popup = document.getElementById('cell-popup');
+        const selectedCell = document.getElementById(`c-${selT}-${selR}`);
+        const mapSection = document.getElementById('map-section');
+        
+        if (!selectedCell) {
+            popup.classList.remove('active');
+            return;
+        }
+        
+        const cellRect = selectedCell.getBoundingClientRect();
+        const mapRect = mapSection.getBoundingClientRect();
+        const popupWidth = 150; // ポップアップの幅（推定）
+        const popupHeight = 80; // ポップアップの高さ（推定）
+        
+        // 各種境界の計算
+        const headerRow = document.getElementById('headerRow');
+        const headerHeight = headerRow.offsetHeight;
+        const visibleTop = mapRect.top + headerHeight;
+        const scrollbarHeight = mapSection.offsetHeight - mapSection.clientHeight;
+        const visibleBottom = mapRect.bottom - scrollbarHeight;
+        const labelWidth = 80;
+        const visibleLeft = mapRect.left + labelWidth;
+        const visibleRight = mapRect.right;
+        
+        const infoSection = document.getElementById('info-section');
+        const infoRect = infoSection.getBoundingClientRect();
+        const infoTop = infoRect.top;
+        
+        // セルが見えていない場合はポップアップを非表示
+        // 上端チェック
+        if (cellRect.bottom < visibleTop) {
+            popup.classList.remove('active');
+            return;
+        }
+        // 下端チェック（横スクロールバー考慮）
+        if (cellRect.top > visibleBottom) {
+            popup.classList.remove('active');
+            return;
+        }
+        // 左端チェック（TPS列ラベル考慮）
+        if (cellRect.right < visibleLeft) {
+            popup.classList.remove('active');
+            return;
+        }
+        // 右端チェック
+        if (cellRect.left > visibleRight) {
+            popup.classList.remove('active');
+            return;
+        }
+        
+        // デフォルト位置：セルの右側
+        let left = cellRect.right + 10;
+        let top = cellRect.top;
+        
+        // 右側に表示スペースがない場合は左側に表示
+        if (left + popupWidth > visibleRight) {
+            // セルの左側に配置（セルと重ならないように十分な間隔を取る）
+            left = cellRect.left - popupWidth - 45;
+        }
+        
+        // 左端がラベル列より左にはみ出る場合
+        if (left < visibleLeft) {
+            left = visibleLeft + 5;
+        }
+        
+        // 下側に表示スペースがない場合は上に調整
+        // INFORMATIONペインと重ならないように
+        const maxBottom = Math.min(visibleBottom, infoTop);
+        if (top + popupHeight > maxBottom) {
+            top = maxBottom - popupHeight - 5;
+        }
+        
+        // 上側がヘッダーより上にはみ出る場合は調整
+        if (top < visibleTop) {
+            top = visibleTop + 5;
+        }
+        
+        popup.style.top = top + 'px';
+        popup.style.left = left + 'px';
+        popup.classList.add('active');
+    }
+    
+    function saveHistory() {
+        // 現在の位置より後の履歴を削除
+        history = history.slice(0, historyIndex + 1);
+        
+        // 新しい状態を追加
+        history.push(JSON.parse(JSON.stringify(fuelMap)));
+        
+        // 履歴の上限を超えたら古いものを削除
+        if (history.length > MAX_HISTORY) {
+            history.shift();
+        } else {
+            historyIndex++;
+        }
+    }
 
     let isDragging = false;
     let initialX, initialY;
@@ -386,6 +660,10 @@
             }
         });
         resizeObserver.observe(graphOverlay);
+        
+        // スクロール時にポップアップ位置を更新
+        const mapSection = document.getElementById('map-section');
+        mapSection.addEventListener('scroll', updatePopupPosition);
     });
 
     function initData() {
@@ -398,6 +676,7 @@
                 originalFuelMap[t][r] = val;
             }
         }
+        saveHistory();
     }
 
     function getColor(val, t, r) {
@@ -484,9 +763,14 @@
                 input.onfocus = () => {
                     selT = t; selR = r;
                     updateUISelection();
+                    input.select();
                     if (document.getElementById('graph-overlay').classList.contains('active')) {
                         updateGraph();
                     }
+                };
+                
+                input.onclick = () => {
+                    input.select();
                 };
                 
                 input.oninput = (e) => {
@@ -498,8 +782,58 @@
                     }
                 };
                 
+                input.onchange = () => {
+                    saveHistory();
+                };
+                
                 input.addEventListener('keydown', (e) => {
-                    if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key)) {
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        let nt = t, nr = r;
+                        
+                        if (e.shiftKey) {
+                            // Shift+Enter: 上に移動
+                            nt--;
+                        } else {
+                            // Enter: 下に移動
+                            nt++;
+                        }
+                        
+                        if (nt >= 0 && nt < 21) {
+                            const target = document.querySelector(`#c-${nt}-${nr} input`);
+                            target.focus({preventScroll: true});
+                            target.select();
+                            
+                            // スクロール処理
+                            const container = document.getElementById('map-section');
+                            const targetCell = document.getElementById(`c-${nt}-${nr}`);
+                            
+                            requestAnimationFrame(() => {
+                                const cellRect = targetCell.getBoundingClientRect();
+                                const containerRect = container.getBoundingClientRect();
+                                const headerRow = document.getElementById('headerRow');
+                                const headerHeight = headerRow.offsetHeight;
+                                const scrollbarHeight = container.offsetHeight - container.clientHeight;
+                                
+                                if (e.shiftKey) {
+                                    // 上移動
+                                    const visibleTop = containerRect.top + headerHeight;
+                                    if (cellRect.top < visibleTop) {
+                                        const scrollAmount = visibleTop - cellRect.top;
+                                        container.scrollTop -= scrollAmount;
+                                    }
+                                } else {
+                                    // 下移動
+                                    const visibleBottom = containerRect.bottom - scrollbarHeight;
+                                    if (cellRect.bottom > visibleBottom) {
+                                        const scrollAmount = cellRect.bottom - visibleBottom;
+                                        container.scrollTop += scrollAmount;
+                                    }
+                                }
+                            });
+                        }
+                    }
+                    else if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key)) {
                         e.preventDefault();
                         let nt = t, nr = r;
                         
@@ -605,8 +939,19 @@
             gridCells[labelIndex].classList.add('selected-label');
         }
         
+        // 情報パネルの更新
+        const currentValue = fuelMap[selT][selR];
+        const originalValue = originalFuelMap[selT][selR];
+        const change = currentValue - originalValue;
+        const changePercent = originalValue !== 0 ? ((change / originalValue) * 100).toFixed(1) : '0.0';
+        
         document.getElementById('info-cell').innerText = `RPM: ${RPM_AXIS[selR]}, TPS: ${TPS_AXIS[selT]}%`;
-        document.getElementById('info-value').innerText = fuelMap[selT][selR];
+        document.getElementById('info-value').innerText = currentValue;
+        document.getElementById('info-original').innerText = originalValue;
+        
+        const changeSign = change >= 0 ? '+' : '';
+        document.getElementById('info-change').innerText = `${changeSign}${change} μs`;
+        document.getElementById('info-change-percent').innerText = `${changeSign}${changePercent}%`;
         
         let min = Infinity, max = -Infinity;
         for (let t = 0; t < 21; t++) {
@@ -616,6 +961,9 @@
             }
         }
         document.getElementById('info-range').innerText = `${min} - ${max} μs`;
+        
+        // ポップアップの位置更新
+        updatePopupPosition();
     }
 
     function updateGraph() {
@@ -682,6 +1030,7 @@
                 }
             });
             originalFuelMap = fuelMap.map(row => row.slice());
+            saveHistory();
             renderTable();
             if (document.getElementById('graph-overlay').classList.contains('active')) {
                 updateGraph();
