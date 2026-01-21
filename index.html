@@ -24,6 +24,31 @@
         .toolbar-btn:hover { background: #3e3e42; }
         .toolbar-btn:active { background: #007acc; }
         .toolbar-btn.active { background: #007acc; }
+        .toolbar-btn:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+        .toolbar-btn:disabled:hover {
+            background: transparent;
+        }
+        .toolbar-btn.ecu-disconnected {
+            background: #8b0000;
+        }
+        .toolbar-btn.ecu-disconnected:hover {
+            background: #a52a2a;
+        }
+        .toolbar-btn.ecu-connected {
+            background: #006400;
+        }
+        .toolbar-btn.ecu-connected:hover {
+            background: #228b22;
+        }
+        .toolbar-separator {
+            width: 1px;
+            height: 100%;
+            background: var(--border);
+            margin: 0 4px;
+        }
         .toolbar-btn::after {
             content: attr(data-tooltip);
             position: absolute;
@@ -299,14 +324,25 @@
 <body>
 
 <div id="toolbar">
-    <button class="toolbar-btn" data-tooltip="ファイルを開く" onclick="openFile()">📁</button>
-    <button class="toolbar-btn" data-tooltip="基準ファイルを開く" onclick="openBaseFile()">📋</button>
-    <button class="toolbar-btn" data-tooltip="保存" onclick="saveFile()">💾</button>
-    <button class="toolbar-btn" data-tooltip="元に戻す" onclick="undo()" id="btn-undo">↶</button>
-    <button class="toolbar-btn" data-tooltip="やり直し" onclick="redo()" id="btn-redo">↷</button>
-    <button class="toolbar-btn" data-tooltip="ECUに書き込み" onclick="writeToECU()">📤</button>
-    <button class="toolbar-btn" data-tooltip="ECUから読み取り" onclick="readFromECU()">📥</button>
-    <button class="toolbar-btn" data-tooltip="グラフ表示" onclick="toggleGraph()" id="btn-graph">📊</button>
+    <button class="toolbar-btn" data-tooltip="ファイルを開く (Ctrl+O)" onclick="openFile()">📁</button>
+    <button class="toolbar-btn" data-tooltip="基準ファイルを開く (Ctrl+Shift+O)" onclick="openBaseFile()">📋</button>
+    <button class="toolbar-btn" data-tooltip="保存 (Ctrl+S)" onclick="saveFile()">💾</button>
+    
+    <div class="toolbar-separator"></div>
+    
+    <button class="toolbar-btn" data-tooltip="元に戻す (Ctrl+Z)" onclick="undo()" id="btn-undo">↶</button>
+    <button class="toolbar-btn" data-tooltip="やり直し (Ctrl+Y)" onclick="redo()" id="btn-redo">↷</button>
+    
+    <div class="toolbar-separator"></div>
+    
+    <button class="toolbar-btn ecu-disconnected" data-tooltip="ECUに接続" onclick="toggleECUConnection()" id="btn-ecu-connect">📡</button>
+    <button class="toolbar-btn" data-tooltip="ECUに書き込み (Ctrl+W)" onclick="writeToECU()" id="btn-write" disabled>📤</button>
+    <button class="toolbar-btn" data-tooltip="ECUから読み取り (Ctrl+R)" onclick="readFromECU()" id="btn-read" disabled>📥</button>
+    
+    <div class="toolbar-separator"></div>
+    
+    <button class="toolbar-btn" data-tooltip="グラフ表示 (Ctrl+G)" onclick="toggleGraph()" id="btn-graph">📊</button>
+    
     <span class="toolbar-title">ECU Map Studio - Kitaco S3 v1.0</span>
     <button class="hamburger-menu" onclick="toggleSettings()" id="btn-settings">☰</button>
 </div>
@@ -409,6 +445,7 @@
     let selectedCells = new Set(); // "t-r"形式で保存
     let selectionStart = null; // {t, r}
     let isSelecting = false;
+    let isShiftSelecting = false; // Shift+矢印キーでの範囲選択
     
     // 履歴管理
     let history = [];
@@ -419,13 +456,28 @@
     let popupMode = 'abs'; // 'abs' or 'pct'
     let popupDeltaAbs = 10; // 絶対値モードの値を保存
     let popupDeltaPct = 1.0; // %モードの値を保存
+    
+    // ECU接続状態
+    let ecuConnected = false;
 
     window.openFile = function() {
-        document.getElementById('file-input').click();
+        console.log('openFile called');
+        const fileInput = document.getElementById('file-input');
+        if (fileInput) {
+            fileInput.click();
+        } else {
+            console.error('file-input not found');
+        }
     };
     
     window.openBaseFile = function() {
-        document.getElementById('base-file-input').click();
+        console.log('openBaseFile called');
+        const baseFileInput = document.getElementById('base-file-input');
+        if (baseFileInput) {
+            baseFileInput.click();
+        } else {
+            console.error('base-file-input not found');
+        }
     };
 
     window.saveFile = function() {
@@ -477,11 +529,36 @@
         renderTable();
     };
 
+    window.toggleECUConnection = function() {
+        ecuConnected = !ecuConnected;
+        const btn = document.getElementById('btn-ecu-connect');
+        const writeBtn = document.getElementById('btn-write');
+        const readBtn = document.getElementById('btn-read');
+        
+        if (ecuConnected) {
+            btn.classList.remove('ecu-disconnected');
+            btn.classList.add('ecu-connected');
+            btn.setAttribute('data-tooltip', 'ECUから切断');
+            writeBtn.disabled = false;
+            readBtn.disabled = false;
+            alert('ECUに接続しました（デモ）');
+        } else {
+            btn.classList.remove('ecu-connected');
+            btn.classList.add('ecu-disconnected');
+            btn.setAttribute('data-tooltip', 'ECUに接続');
+            writeBtn.disabled = true;
+            readBtn.disabled = true;
+            alert('ECUから切断しました（デモ）');
+        }
+    };
+
     window.writeToECU = function() {
+        if (!ecuConnected) return;
         alert('ECUへの書き込み機能は未実装です');
     };
 
     window.readFromECU = function() {
+        if (!ecuConnected) return;
         alert('ECUからの読み取り機能は未実装です');
     };
 
@@ -601,6 +678,21 @@
         }
     };
     
+    function saveHistory() {
+        // 現在の位置より後の履歴を削除
+        history = history.slice(0, historyIndex + 1);
+        
+        // 新しい状態を追加
+        history.push(JSON.parse(JSON.stringify(fuelMap)));
+        
+        // 履歴の上限を超えたら古いものを削除
+        if (history.length > MAX_HISTORY) {
+            history.shift();
+        } else {
+            historyIndex++;
+        }
+    }
+    
     function updatePopupPosition() {
         const popup = document.getElementById('cell-popup');
         const selectedCell = document.getElementById(`c-${selT}-${selR}`);
@@ -701,6 +793,54 @@
 
     let isDragging = false;
     let initialX, initialY;
+
+    // グローバルキーボードショートカット
+    document.addEventListener('keydown', function(e) {
+        // input要素にフォーカスがある場合、一部のショートカットをスキップ
+        const activeElement = document.activeElement;
+        const isInputFocused = activeElement && (activeElement.tagName === 'INPUT' || activeElement.tagName === 'SELECT');
+        
+        // Ctrl+O: ファイルを開く
+        if (e.ctrlKey && !e.shiftKey && e.key === 'o') {
+            e.preventDefault();
+            openFile();
+        }
+        // Ctrl+Shift+O: 基準ファイルを開く
+        else if (e.ctrlKey && e.shiftKey && e.key === 'O') {
+            e.preventDefault();
+            openBaseFile();
+        }
+        // Ctrl+S: 保存
+        else if (e.ctrlKey && e.key === 's') {
+            e.preventDefault();
+            saveFile();
+        }
+        // Ctrl+Z: 元に戻す（input以外）
+        else if (e.ctrlKey && e.key === 'z' && !isInputFocused) {
+            e.preventDefault();
+            undo();
+        }
+        // Ctrl+Y: やり直し（input以外）
+        else if (e.ctrlKey && e.key === 'y' && !isInputFocused) {
+            e.preventDefault();
+            redo();
+        }
+        // Ctrl+W: ECUに書き込み
+        else if (e.ctrlKey && e.key === 'w') {
+            e.preventDefault();
+            if (ecuConnected) writeToECU();
+        }
+        // Ctrl+R: ECUから読み取り
+        else if (e.ctrlKey && e.key === 'r') {
+            e.preventDefault();
+            if (ecuConnected) readFromECU();
+        }
+        // Ctrl+G: グラフ表示
+        else if (e.ctrlKey && e.key === 'g') {
+            e.preventDefault();
+            toggleGraph();
+        }
+    });
 
     document.addEventListener('DOMContentLoaded', function() {
         const graphHeader = document.getElementById('graph-header');
@@ -973,8 +1113,52 @@
                     }
                     else if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key)) {
                         e.preventDefault();
-                        let nt = t, nr = r;
                         
+                        // Shift+矢印キーで範囲選択
+                        if (e.shiftKey) {
+                            if (!isShiftSelecting) {
+                                isShiftSelecting = true;
+                                selectionStart = {t, r};
+                                selectedCells.clear();
+                                selectedCells.add(`${t}-${r}`);
+                            }
+                            
+                            let nt = selT, nr = selR;
+                            
+                            if(e.key==="ArrowUp") nt--; 
+                            else if(e.key==="ArrowDown") nt++;
+                            else if(e.key==="ArrowLeft") nr--;
+                            else if(e.key==="ArrowRight") nr++;
+                            
+                            if(nt>=0 && nt<21 && nr>=0 && nr<20) {
+                                selT = nt; selR = nr;
+                                
+                                // 範囲選択を更新
+                                const minT = Math.min(selectionStart.t, nt);
+                                const maxT = Math.max(selectionStart.t, nt);
+                                const minR = Math.min(selectionStart.r, nr);
+                                const maxR = Math.max(selectionStart.r, nr);
+                                
+                                selectedCells.clear();
+                                for (let ti = minT; ti <= maxT; ti++) {
+                                    for (let ri = minR; ri <= maxR; ri++) {
+                                        selectedCells.add(`${ti}-${ri}`);
+                                    }
+                                }
+                                
+                                updateUISelection();
+                                
+                                const target = document.querySelector(`#c-${nt}-${nr} input`);
+                                target.focus({preventScroll: true});
+                            }
+                        } else {
+                            // 通常の矢印キー移動
+                            isShiftSelecting = false;
+                            selectedCells.clear();
+                            selectedCells.add(`${t}-${r}`);
+                            
+                            let nt = t, nr = r;
+                        }
                         if(e.key==="ArrowUp") nt--; 
                         else if(e.key==="ArrowDown") nt++;
                         else if(e.key==="ArrowLeft") nr--;
